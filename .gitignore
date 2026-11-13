@@ -1,0 +1,19 @@
+# entorno
+.venv/
+__pycache__/
+*.pyc
+
+# datos pesados (se regeneran con los scripts)
+data/
+*.pgn
+*.zst
+*.npz
+
+# pesos de las redes (pesan mucho; se comparten aparte)
+*.pt
+*.pt.tmp
+checkpoints/
+
+# se suben las curvas y logs (sirven para el informe)
+!runs/**/curva*.csv
+!runs/**/curva*.png

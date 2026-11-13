@@ -1,0 +1,4 @@
+checkpoint,partidas_entrenadas,puntaje_codicioso,elo_vs_codicioso,puntaje_minimax2,elo_vs_minimax2
+ck_000000.pt,0,0.25,-191,0.1,-382
+ck_010000.pt,10000,0.8,241,0.25,-191
+ck_020000.pt,20000,1.0,636,0.375,-89
