@@ -1,10 +1,12 @@
 """
 Red de valor: posicion (12x8x8) -> valor en [-1, 1] para el bando que mueve.
 
-ResNet chica. Con canales=64 y bloques=4 tiene unos 330 mil parametros:
+ResNet chica. Con canales=64 y bloques=4 tiene unos 370 mil parametros:
 entra holgada en la 4050 / 5060 y evalua miles de posiciones por segundo.
 La ultima capa convolucional queda guardada en self.last_features para Grad-CAM.
 """
+import os
+
 import torch
 import torch.nn as nn
 from encoding import N_PLANES
@@ -65,4 +67,12 @@ def load_checkpoint(path, device="cpu"):
 
 
 def default_device():
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    """NVIDIA (cuda) > Mac con Apple Silicon (mps) > cpu. Se puede forzar con CHESS_DEVICE=cpu|cuda|mps."""
+    forced = os.environ.get("CHESS_DEVICE")
+    if forced:
+        return forced
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
