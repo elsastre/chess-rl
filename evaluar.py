@@ -36,12 +36,16 @@ def main():
     ap.add_argument("--q", type=int, default=None, help="usa la busqueda nueva con capturas de este largo")
     ap.add_argument("--rivals", default="aleatorio,codicioso,minimax2")
     ap.add_argument("--stockfish", default=None)
+    ap.add_argument("--sf-nodes", type=int, default=None,
+                    help="Stockfish piensa N nodos por jugada en vez de 0,05 s (comparable entre maquinas)")
+    ap.add_argument("--poda", action="store_true", help="profundidad 2 con poda alfa-beta (mas rapido, mismo valor)")
+    ap.add_argument("--mates", action="store_true", help="la busqueda del agente detecta mates en 1 en las hojas")
     args = ap.parse_args()
 
     device = default_device()
     rivals = [RIVALS[name.strip()]() for name in args.rivals.split(",")]
     if args.stockfish:
-        rivals.append(StockfishPlayer(args.stockfish))
+        rivals.append(StockfishPlayer(args.stockfish, nodes=args.sf_nodes))
 
     paths = sorted(glob.glob(os.path.join(args.run, "ck_*.pt")))
     chosen = paths[::args.every]
@@ -49,7 +53,7 @@ def main():
         chosen.append(paths[-1])
 
     if args.q is not None:
-        out = os.path.join(args.run, f"curva_d{args.depth}q{args.q}.csv")
+        out = os.path.join(args.run, f"curva_d{args.depth}q{args.q}{'m' if args.mates else ''}.csv")
     else:
         out = os.path.join(args.run, "curva.csv" if args.depth == 1 else f"curva_d{args.depth}.csv")
     rows, fields = {}, ["checkpoint", "partidas_entrenadas"]
@@ -72,7 +76,7 @@ def main():
     for i, (path, pending) in enumerate(todo, 1):
         name = os.path.basename(path)
         model, extra = load_checkpoint(path, device)
-        agent = (SearchPlayer(model, device, args.depth, args.q) if args.q is not None
+        agent = (SearchPlayer(model, device, args.depth, args.q, mates=args.mates, poda=args.poda) if args.q is not None
                  else NetPlayer(model, device, args.depth))
         row = rows.setdefault(name, {"checkpoint": name, "partidas_entrenadas": extra.get("games", "")})
         for r in pending:

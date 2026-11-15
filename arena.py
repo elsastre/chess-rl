@@ -117,14 +117,16 @@ class MinimaxPlayer(Player):
 class StockfishPlayer(Player):
     """Stockfish con fuerza limitada. Sirve como ancla de Elo conocida."""
 
-    def __init__(self, path, elo=1320, think_time=0.05):
+    def __init__(self, path, elo=1320, think_time=0.05, nodes=None):
+        """nodes: si se pasa, Stockfish piensa esa cantidad de nodos por jugada en vez de un tiempo fijo.
+        Asi su fuerza no depende de la maquina (con tiempo fijo, una compu rapida enfrenta un rival mas fuerte)."""
         self.engine = chess.engine.SimpleEngine.popen_uci(path)
         opts = self.engine.options
         lo = opts["UCI_Elo"].min if "UCI_Elo" in opts else elo
         self.elo = max(elo, lo)  # Stockfish no acepta valores bajo su minimo
         self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo": self.elo})
-        self.limit = chess.engine.Limit(time=think_time)
-        self.name = f"stockfish{self.elo}"
+        self.limit = chess.engine.Limit(nodes=nodes) if nodes else chess.engine.Limit(time=think_time)
+        self.name = f"stockfish{self.elo}" + (f"n{nodes}" if nodes else "")
 
     def choose(self, board):
         return self.engine.play(board, self.limit).move

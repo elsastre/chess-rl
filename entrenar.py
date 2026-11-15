@@ -49,6 +49,39 @@ from search import search, make_evaluator, pick_move, qsearch, INF, MATE
 # Niveles de Stockfish para el curriculo: (Skill Level 0-20, limite de nodos por jugada)
 SF_LEVELS = [(0, 30), (0, 100), (1, 300), (3, 700), (5, 1500), (7, 3000), (9, 6000),
              (11, 12000), (13, 25000), (16, 50000), (20, 100000)]
+# Escalones mas faciles (--sf-azar): el Stockfish mas debil (Skill 0, 30 nodos) juega una jugada al azar
+# con esta probabilidad. Hacen falta porque Skill 0 equivale mas o menos a 1320 de Elo: en la corrida
+# final_sf el agente saco 21 % contra el y el curriculo nunca se movio del primer nivel.
+SF_AZAR = [0.8, 0.6, 0.45, 0.3, 0.2, 0.1]
+
+
+def sf_levels(cfg):
+    """Lista de niveles (prob. de jugada al azar, Skill Level, nodos), del mas facil al mas dificil."""
+    faciles = [(eps, 0, 30) for eps in SF_AZAR] if cfg.get("sf_azar") else []
+    return faciles + [(0.0, skill, nodes) for skill, nodes in SF_LEVELS]
+
+
+class ReplayBuffer:
+    """Buffer circular en arreglos de numpy: 104 bytes por muestra (2 millones = 208 MB) y sorteo rapido."""
+
+    def __init__(self, capacity):
+        self.x = np.zeros((capacity, 96), dtype=np.uint8)
+        self.sign = np.zeros(capacity, dtype=np.float32)
+        self.y = np.zeros(capacity, dtype=np.float32)
+        self.capacity, self.n, self.pos = capacity, 0, 0
+
+    def __len__(self):
+        return self.n
+
+    def extend(self, samples):
+        for planes, sign, target in samples:
+            self.x[self.pos], self.sign[self.pos], self.y[self.pos] = planes, sign, target
+            self.pos = (self.pos + 1) % self.capacity
+            self.n = min(self.n + 1, self.capacity)
+
+    def sample(self, batch):
+        idx = np.random.randint(0, self.n, size=min(batch, self.n))
+        return self.x[idx], self.sign[idx], self.y[idx]
 
 
 # =============================================================== una partida
@@ -97,14 +130,20 @@ def lambda_returns(ws, z, lam):
 
 
 def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
-    """opponent: None (autojuego) | ('red', evaluate_viejo) | ('sf', engine, limit).
+    """opponent: None (autojuego) | ('red', evaluate_viejo) | ('sf', engine, limit, prob_azar).
     Devuelve (muestras, info). Muestra = (planos empaquetados, signo, objetivo)."""
     board = start_board(cfg, fens)
     collect = cfg["algo"] in ("treestrap", "mixto")
     use_td = cfg["algo"] in ("tdleaf", "mixto")
     # en autojuego desde Lichess se juegan tramos cortos; contra rivales, partidas completas
     # (para que el curriculo de Stockfish se base en resultados reales)
-    max_plies = cfg["segment"] if (cfg["start"] == "lichess" and opponent is None) else cfg["max_plies"]
+    # con --p-completas, una parte de las partidas de autojuego tambien se juega entera (resultado real)
+    tramo = cfg["start"] == "lichess" and opponent is None and random.random() >= cfg.get("p_completas", 0.0)
+    max_plies = cfg["segment"] if tramo else cfg["max_plies"]
+    mates, poda = cfg.get("mates", False), cfg.get("poda", False)
+    temperature = cfg["temperature"]
+    if opponent is not None and opponent[0] == "sf" and cfg.get("temp_stockfish") is not None:
+        temperature = cfg["temp_stockfish"]     # contra Stockfish se puede jugar sin exploracion
     samples, td_rec, vabs = [], [], []
     plies = 0
     while True:
@@ -124,7 +163,7 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
             break
         agent_turn = opponent is None or board.turn == agent_color
         if agent_turn:
-            res = search(board, evaluate, cfg["depth"], cfg["qdepth"], collect=collect)
+            res = search(board, evaluate, cfg["depth"], cfg["qdepth"], collect=collect, mates=mates, poda=poda)
             if collect:
                 ts = res.treestrap
                 if cfg["ts_max"] > 0 and len(ts) > cfg["ts_max"]:
@@ -136,9 +175,11 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
             color = 1.0 if board.turn == chess.WHITE else -1.0
             leaf = None if res.pv_leaf is None else (pack(res.pv_leaf[0]), color * res.pv_leaf[1])
             td_rec.append((color * res.value, leaf))
-            move = pick_move(res.moves, cfg["temperature"])
+            move = pick_move(res.moves, temperature)
         elif opponent[0] == "red":
-            move = pick_move(search(board, opponent[1], cfg["depth"], cfg["qdepth"]).moves, 0.0)
+            move = pick_move(search(board, opponent[1], cfg["depth"], cfg["qdepth"], mates=mates, poda=poda).moves, 0.0)
+        elif opponent[3] > 0 and random.random() < opponent[3]:
+            move = random.choice(list(board.legal_moves))      # escalon facil: Stockfish juega al azar
         else:
             move = opponent[1].play(board, opponent[2]).move
         board.push(move)
@@ -169,12 +210,12 @@ class Opponents:
         r = random.random()
         cfg = self.cfg
         if self.engine and r < cfg["p_stockfish"]:
-            skill, nodes = SF_LEVELS[sf_level]
+            eps, skill, nodes = sf_levels(cfg)[sf_level]
             try:
                 self.engine.configure({"Skill Level": skill})
             except chess.engine.EngineError:
                 pass
-            return ("sf", self.engine, chess.engine.Limit(nodes=nodes)), f"stockfish{sf_level}"
+            return ("sf", self.engine, chess.engine.Limit(nodes=nodes), eps), f"stockfish{sf_level}"
         if r < cfg["p_stockfish"] + cfg["p_viejos"]:
             cks = sorted(glob.glob(os.path.join(cfg["out"], "ck_*.pt")))
             if len(cks) >= 2:
@@ -226,10 +267,10 @@ def train_steps(model, opt, buffer, n_steps, batch, device):
     losses = []
     model.train()
     for _ in range(n_steps):
-        b = random.sample(buffer, min(batch, len(buffer)))
-        x = torch.from_numpy(unpack(np.stack([s[0] for s in b]))).float().to(device)
-        sign = torch.tensor([s[1] for s in b], dtype=torch.float32, device=device)
-        y = torch.tensor([s[2] for s in b], dtype=torch.float32, device=device)
+        bx, bsign, by = buffer.sample(batch)
+        x = torch.from_numpy(unpack(bx)).float().to(device)
+        sign = torch.from_numpy(bsign).to(device)
+        y = torch.from_numpy(by).to(device)
         loss = torch.nn.functional.smooth_l1_loss(sign * model(x), y, beta=0.1)
         opt.zero_grad(); loss.backward(); opt.step()
         losses.append(loss.item())
@@ -259,6 +300,18 @@ def main():
     ap.add_argument("--qdepth", type=int, default=4, help="largo maximo de la secuencia de capturas")
     ap.add_argument("--lam", type=float, default=0.7)
     ap.add_argument("--lr", type=float, default=5e-4)
+    ap.add_argument("--lr-final", type=float, default=None,
+                    help="si se pasa, la tasa de aprendizaje baja en linea recta de --lr a este valor durante la corrida")
+    ap.add_argument("--mates", action="store_true",
+                    help="la busqueda detecta mates en 1 en las hojas (a profundidad 1 ve el mate del rival)")
+    ap.add_argument("--poda", action="store_true",
+                    help="con --depth 2: poda alfa-beta (mismo valor que el arbol completo, varias veces mas rapido)")
+    ap.add_argument("--sf-azar", action="store_true",
+                    help="agrega escalones faciles al curriculo: Stockfish que a veces juega al azar")
+    ap.add_argument("--temp-stockfish", type=float, default=None,
+                    help="temperatura del agente contra Stockfish (por defecto, la de --temperature)")
+    ap.add_argument("--p-completas", type=float, default=0.0,
+                    help="fraccion de partidas de autojuego que se juegan enteras en vez de un tramo")
     ap.add_argument("--temperature", type=float, default=0.05)
     ap.add_argument("--start", choices=["inicial", "lichess"], default="inicial")
     ap.add_argument("--fens", default=None, help="archivo de posiciones (posiciones_lichess.py)")
@@ -310,7 +363,8 @@ def main():
         writer.writerow(["partida", "segundos", "oponente", "nivel_sf", "plies", "resultado", "termino",
                          "muestras", "loss", "buffer", "valor_abs"])
 
-    buffer = deque(maxlen=args.buffer)
+    buffer = ReplayBuffer(args.buffer)
+    niveles = sf_levels(cfg)
     sf_level = mp.Value("i", 0) if args.workers > 0 else type("V", (), {"value": 0})()
     sf_recent = deque(maxlen=30)
     vabs_recent = deque(maxlen=50)
@@ -353,6 +407,10 @@ def main():
             if len(buffer) >= args.batch and pending_samples >= 1:
                 n = int(pending_samples); pending_samples -= n
                 loss = train_steps(model, opt, buffer, n, args.batch, device)
+                if args.lr_final is not None:                       # baja lineal de la tasa de aprendizaje
+                    avance = (g - start_games) / args.games
+                    for group in opt.param_groups:
+                        group["lr"] = args.lr + (args.lr_final - args.lr) * avance
                 if args.workers == 0:
                     evaluate = make_evaluator(model, device)
 
@@ -360,7 +418,7 @@ def main():
                 sf_recent.append((info["result"] + 1) / 2)
                 if len(sf_recent) >= 20:
                     rate = sum(sf_recent) / len(sf_recent)
-                    if rate > 0.6 and sf_level.value < len(SF_LEVELS) - 1:
+                    if rate > 0.6 and sf_level.value < len(niveles) - 1:
                         sf_level.value += 1; sf_recent.clear()
                     elif rate < 0.4 and sf_level.value > 0:
                         sf_level.value -= 1; sf_recent.clear()
