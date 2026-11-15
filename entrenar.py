@@ -44,7 +44,7 @@ import torch.multiprocessing as mp
 
 from encoding import pack, unpack, terminal_value
 from model import ValueNet, save_checkpoint, load_checkpoint, default_device
-from search import search, make_evaluator, pick_move
+from search import search, make_evaluator, pick_move, qsearch, INF, MATE
 
 # Niveles de Stockfish para el curriculo: (Skill Level 0-20, limite de nodos por jugada)
 SF_LEVELS = [(0, 30), (0, 100), (1, 300), (3, 700), (5, 1500), (7, 3000), (9, 6000),
@@ -80,6 +80,13 @@ def start_board(cfg, fens):
     return board
 
 
+def material_value(board):
+    """Valor por material (resolviendo cambios) desde las blancas, en [-1, 1]."""
+    cp, _ = qsearch(board, -INF, INF, 4)
+    v = 1.0 if cp >= MATE // 2 else -1.0 if cp <= -MATE // 2 else math.tanh(cp * math.log(10) / 800)
+    return v if board.turn == chess.WHITE else -v
+
+
 def lambda_returns(ws, z, lam):
     out, g, nxt = [0.0] * len(ws), z, z
     for t in range(len(ws) - 1, -1, -1):
@@ -98,7 +105,7 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
     # en autojuego desde Lichess se juegan tramos cortos; contra rivales, partidas completas
     # (para que el curriculo de Stockfish se base en resultados reales)
     max_plies = cfg["segment"] if (cfg["start"] == "lichess" and opponent is None) else cfg["max_plies"]
-    samples, td_rec = [], []
+    samples, td_rec, vabs = [], [], []
     plies = 0
     while True:
         exact = terminal_value(board)
@@ -107,14 +114,23 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
             finished = True
             break
         if plies >= max_plies:
-            z_white = td_rec[-1][0] if td_rec else 0.0     # se corta: el objetivo sale de la propia busqueda
+            # se corta la partida: el objetivo final NO puede salir solo de la propia red,
+            # porque sin un ancla externa la red puede colapsar a "todo vale 0".
+            if cfg["adjudicar"] == "material":
+                z_white = material_value(board)
+            else:
+                z_white = td_rec[-1][0] if td_rec else 0.0
             finished = False
             break
         agent_turn = opponent is None or board.turn == agent_color
         if agent_turn:
             res = search(board, evaluate, cfg["depth"], cfg["qdepth"], collect=collect)
             if collect:
-                samples.extend((pack(p), 1.0, t) for p, t in res.treestrap)
+                ts = res.treestrap
+                if cfg["ts_max"] > 0 and len(ts) > cfg["ts_max"]:
+                    ts = random.sample(ts, cfg["ts_max"])
+                samples.extend((pack(p), 1.0, t) for p, t in ts)
+            vabs.append(abs(res.value))
             color = 1.0 if board.turn == chess.WHITE else -1.0
             leaf = None if res.pv_leaf is None else (pack(res.pv_leaf[0]), color * res.pv_leaf[1])
             td_rec.append((color * res.value, leaf))
@@ -129,12 +145,13 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
         targets = lambda_returns([w for w, _ in td_rec], z_white, cfg["lam"])
         for (w, leaf), y in zip(td_rec, targets):
             if leaf is not None:
-                samples.append((leaf[0], leaf[1], float(y)))
+                samples.extend([(leaf[0], leaf[1], float(y))] * cfg["td_peso"])
     if opponent is None:
         result = z_white                                    # autojuego: resultado desde blancas
     else:
         result = z_white if agent_color == chess.WHITE else -z_white
-    return samples, {"plies": plies, "result": result, "finished": finished}
+    return samples, {"plies": plies, "result": result, "finished": finished,
+                     "vabs": float(np.mean(vabs)) if vabs else 0.0}
 
 
 # =============================================================== rivales
@@ -246,6 +263,10 @@ def main():
     ap.add_argument("--segment", type=int, default=30, help="jugadas por tramo cuando --start lichess")
     ap.add_argument("--random-plies", type=int, default=4)
     ap.add_argument("--max-plies", type=int, default=200)
+    ap.add_argument("--adjudicar", choices=["material", "busqueda"], default="material",
+                    help="objetivo cuando se corta una partida: material (ancla externa) o la propia busqueda")
+    ap.add_argument("--ts-max", type=int, default=8, help="maximo de muestras TreeStrap por jugada (0 = todas)")
+    ap.add_argument("--td-peso", type=int, default=4, help="cuantas veces cuenta cada muestra de TD (resultado)")
     ap.add_argument("--stockfish", default=None)
     ap.add_argument("--p-stockfish", type=float, default=0.25)
     ap.add_argument("--p-viejos", type=float, default=0.15)
@@ -285,11 +306,12 @@ def main():
     writer = csv.writer(log)
     if new_log:
         writer.writerow(["partida", "segundos", "oponente", "nivel_sf", "plies", "resultado", "termino",
-                         "muestras", "loss", "buffer"])
+                         "muestras", "loss", "buffer", "valor_abs"])
 
     buffer = deque(maxlen=args.buffer)
     sf_level = mp.Value("i", 0) if args.workers > 0 else type("V", (), {"value": 0})()
     sf_recent = deque(maxlen=30)
+    vabs_recent = deque(maxlen=50)
     pending_samples = 0.0
     loss = float("nan")
     t0 = time.time()
@@ -342,14 +364,18 @@ def main():
                         sf_level.value -= 1; sf_recent.clear()
 
             writer.writerow([g, round(time.time() - t0, 1), info["opponent"], info["sf_level"], info["plies"],
-                             info["result"], int(info["finished"]), len(samples), round(loss, 5), len(buffer)])
+                             info["result"], int(info["finished"]), len(samples), round(loss, 5), len(buffer),
+                             round(info["vabs"], 4)])
+            vabs_recent.append(info["vabs"])
             if g % args.sync_every == 0:
                 safe_save(latest, model, {"games": g})
                 log.flush()
             if g % 20 == 0:
                 rate = (g - start_games) / (time.time() - t0) * 3600
+                va = float(np.mean(vabs_recent))
+                aviso = "  <-- OJO: valores cerca de 0, posible colapso" if g - start_games >= 500 and va < 0.02 else ""
                 print(f"partida {g:6d} | {time.time() - t0:7.0f}s | {rate:5.0f} partidas/h | loss {loss:.4f} "
-                      f"| buffer {len(buffer)} | nivel stockfish {sf_level.value}")
+                      f"| |valor| {va:.3f} | nivel stockfish {sf_level.value}{aviso}")
             if g % args.checkpoint_every == 0:
                 save_checkpoint(os.path.join(args.out, f"ck_{g:06d}.pt"), model,
                                 {"games": g, "seconds": time.time() - t0, "sf_level": sf_level.value, "args": cfg})

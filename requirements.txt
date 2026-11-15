@@ -2,3 +2,4 @@ chess
 numpy
 zstandard
 matplotlib
+pygame
