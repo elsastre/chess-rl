@@ -128,7 +128,9 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
             if collect:
                 ts = res.treestrap
                 if cfg["ts_max"] > 0 and len(ts) > cfg["ts_max"]:
-                    ts = random.sample(ts, cfg["ts_max"])
+                    # ts[0] es siempre la posicion actual (la raiz): entra siempre, porque su objetivo
+                    # es el de la busqueda completa. El resto se elige al azar entre las del arbol.
+                    ts = [ts[0]] + random.sample(ts[1:], cfg["ts_max"] - 1)
                 samples.extend((pack(p), 1.0, t) for p, t in ts)
             vabs.append(abs(res.value))
             color = 1.0 if board.turn == chess.WHITE else -1.0
