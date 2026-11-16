@@ -175,7 +175,8 @@ def play_game(evaluate, cfg, fens, opponent=None, agent_color=None):
             color = 1.0 if board.turn == chess.WHITE else -1.0
             leaf = None if res.pv_leaf is None else (pack(res.pv_leaf[0]), color * res.pv_leaf[1])
             td_rec.append((color * res.value, leaf))
-            move = pick_move(res.moves, temperature)
+            tj = cfg.get("temp_jugadas")
+            move = pick_move(res.moves, temperature if (tj is None or plies < tj) else 0.0)
         elif opponent[0] == "red":
             move = pick_move(search(board, opponent[1], cfg["depth"], cfg["qdepth"], mates=mates, poda=poda).moves, 0.0)
         elif opponent[3] > 0 and random.random() < opponent[3]:
@@ -313,6 +314,9 @@ def main():
     ap.add_argument("--p-completas", type=float, default=0.0,
                     help="fraccion de partidas de autojuego que se juegan enteras en vez de un tramo")
     ap.add_argument("--temperature", type=float, default=0.05)
+    ap.add_argument("--temp-jugadas", type=int, default=None,
+                    help="la exploracion (--temperature) solo se usa en las primeras N jugadas de cada partida o tramo; "
+                         "despues juega su mejor jugada. Por defecto, en todas")
     ap.add_argument("--start", choices=["inicial", "lichess"], default="inicial")
     ap.add_argument("--fens", default=None, help="archivo de posiciones (posiciones_lichess.py)")
     ap.add_argument("--segment", type=int, default=30, help="jugadas por tramo cuando --start lichess")
@@ -342,7 +346,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     cfg = {k: v for k, v in vars(args).items()}
 
-    start_games = 0
+    start_games, extra = 0, {}
     if args.init:
         model, extra = load_checkpoint(args.init, device)
         if args.resume:
@@ -350,6 +354,28 @@ def main():
     else:
         model = ValueNet().to(device).eval()
     opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+
+    # Al reanudar una corrida cortada se recuperan el nivel de Stockfish y el plan de la tasa de aprendizaje,
+    # para que cortar y seguir no vuelva el curriculo al nivel 0 ni la tasa a su valor inicial.
+    viejos_args = extra.get("args", {}) if args.resume else {}
+    nivel_inicial = 0
+    if args.resume and "sf_level" in extra and bool(viejos_args.get("sf_azar")) == bool(args.sf_azar):
+        nivel_inicial = min(int(extra["sf_level"]), len(sf_levels(cfg)) - 1)
+    lr_plan = extra.get("lr_plan") if args.resume else None
+    if args.lr_final is None or not lr_plan or list(lr_plan[2:]) != [args.lr, args.lr_final]:
+        lr_plan = [start_games, args.games, args.lr, args.lr_final]
+
+    def lr_actual(g):
+        if args.lr_final is None:
+            return args.lr
+        avance = min(max((g - lr_plan[0]) / lr_plan[1], 0.0), 1.0)
+        return args.lr + (args.lr_final - args.lr) * avance
+
+    for group in opt.param_groups:
+        group["lr"] = lr_actual(start_games)
+    if args.resume and (nivel_inicial or args.lr_final is not None):
+        print(f"reanudando: nivel stockfish {nivel_inicial}, tasa de aprendizaje {lr_actual(start_games):.2e} "
+              f"(plan desde la partida {lr_plan[0]} durante {lr_plan[1]})")
     latest = os.path.join(args.out, "latest.pt")
     safe_save(latest, model, {"games": start_games})
     if not args.resume:
@@ -365,7 +391,7 @@ def main():
 
     buffer = ReplayBuffer(args.buffer)
     niveles = sf_levels(cfg)
-    sf_level = mp.Value("i", 0) if args.workers > 0 else type("V", (), {"value": 0})()
+    sf_level = mp.Value("i", nivel_inicial) if args.workers > 0 else type("V", (), {"value": nivel_inicial})()
     sf_recent = deque(maxlen=30)
     vabs_recent = deque(maxlen=50)
     pending_samples = 0.0
@@ -376,7 +402,7 @@ def main():
     if args.workers > 0:
         ctx = mp.get_context("spawn")
         q, stop = ctx.Queue(maxsize=4 * args.workers), ctx.Event()
-        sf_level = ctx.Value("i", 0)
+        sf_level = ctx.Value("i", nivel_inicial)
         for w in range(args.workers):
             p = ctx.Process(target=worker_main, args=(w, cfg, q, stop, sf_level, args.seed * 1000 + w + 1), daemon=True)
             p.start(); procs.append(p)
@@ -408,9 +434,8 @@ def main():
                 n = int(pending_samples); pending_samples -= n
                 loss = train_steps(model, opt, buffer, n, args.batch, device)
                 if args.lr_final is not None:                       # baja lineal de la tasa de aprendizaje
-                    avance = (g - start_games) / args.games
                     for group in opt.param_groups:
-                        group["lr"] = args.lr + (args.lr_final - args.lr) * avance
+                        group["lr"] = lr_actual(g)
                 if args.workers == 0:
                     evaluate = make_evaluator(model, device)
 
@@ -438,7 +463,8 @@ def main():
                       f"| |valor| {va:.3f} | nivel stockfish {sf_level.value}{aviso}")
             if g % args.checkpoint_every == 0:
                 save_checkpoint(os.path.join(args.out, f"ck_{g:06d}.pt"), model,
-                                {"games": g, "seconds": time.time() - t0, "sf_level": sf_level.value, "args": cfg})
+                                {"games": g, "seconds": time.time() - t0, "sf_level": sf_level.value, "args": cfg,
+                                 "lr_plan": lr_plan})
     finally:
         if stop is not None:
             stop.set()

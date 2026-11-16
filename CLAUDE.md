@@ -185,6 +185,11 @@ Corridas en `runs/`:
 - `--p-completas P`: esa fracción de las partidas de autojuego se juega entera (hasta `--max-plies`) en vez de
   un tramo de 30 jugadas, para tener más resultados reales y menos adjudicaciones por material.
 - `--depth 2 --poda --mates`: entrenar a profundidad 2 con poda y detección de mates (sección 3.3).
+- `--temp-jugadas N` (15/11): la exploración (`--temperature`) solo se usa en las primeras N jugadas de cada
+  partida o tramo; después el agente juega su mejor jugada. Por defecto, exploración en todas las jugadas.
+- Al reanudar (`--resume`) se recuperan del checkpoint el **nivel de Stockfish** (si `--sf-azar` coincide) y el
+  **plan de `--lr-final`** (`extra["lr_plan"]` = partida de origen, largo, lr, lr_final), así cortar y seguir no
+  reinicia el currículo ni la tasa. El buffer de repetición sí arranca vacío.
 - `--init ck.pt --resume`: sigue contando desde `extra["games"]` de ese checkpoint y **no** vuelve a guardar el
   checkpoint inicial. `--games` son partidas **adicionales**. El buffer y el estado de Adam arrancan vacíos.
 
@@ -274,7 +279,7 @@ Por qué no mejoró la fuerza:
 
 | Causa | Evidencia |
 |---|---|
-| El maestro ve solo una jugada más que el alumno: TreeStrap a profundidad 1 ya había convergido (**causa principal**) | Contra versiones viejas de sí mismo saca 0,26 a 0,28 sin importar la edad del rival (22.000 partidas); en la primera corrida iba de 0,33 (recientes) a 0,42 (muy viejas) |
+| El maestro ve solo una jugada más que el alumno: TreeStrap a profundidad 1 ya había convergido (**causa principal**) | Contra versiones viejas de sí mismo saca 0,26 a 0,28 sin importar la edad del rival (22.000 partidas); en la primera corrida iba de 0,33 (recientes) a 0,42 (muy viejas). **Ojo (15/11):** que esté por debajo de 0,5 incluso contra versiones mucho más débiles se explica por la exploración: el agente juega con temperatura 0,05 y el viejo con 0. Medido con el mismo evaluador en los dos lados: 0,34 con temperatura 0,05 y 0,52 con 0. Lo que sí indica meseta es que no cambie con la edad del rival |
 | El ancla externa es casi toda material | El 88 % del autojuego se corta a las 30 jugadas y se adjudica por material, que la red ya conocía |
 | No sabe rematar | De las partidas contra Stockfish que llegan a 200 jugadas, en el 78 % iba ganando en material |
 | Memoria corta | 400.000 muestras ≈ 1.170 partidas ≈ 4 minutos de juego; con tasa fija, altibajos entre checkpoints |
@@ -293,6 +298,7 @@ Todas son opcionales: sin las opciones nuevas el código se comporta como antes.
 | Currículo medido con exploración | Sin temperatura contra Stockfish | `--temp-stockfish 0` |
 | Ancla casi toda material | Parte del autojuego se juega entero | `--p-completas 0.2` |
 | Memoria corta | Buffer de 2 millones | `--buffer 2000000` |
+| La exploración cuesta ≈ 0,17 de puntaje en todas las jugadas | Explorar solo al principio de cada partida o tramo | `--temp-jugadas 10` |
 | Tasa de aprendizaje fija | Baja lineal | `--lr-final 1e-4` |
 | Medición entre máquinas | Stockfish por nodos | `evaluar.py --sf-nodes N` |
 
@@ -379,16 +385,24 @@ python entrenar.py --out runs/final_sf --init runs/final/ck_150000.pt --resume -
 #   (en una carpeta nueva los "viejos" aparecen recién cuando hay 2 checkpoints; se puede copiar
 #    ck_150000.pt adentro para tenerlo como rival desde el principio)
 
-# Corrida con las mejoras del 15/11 (pendiente 1). En la Mac: bash lanzar_mejoras.sh
-# En Windows (una sola linea; cambiar la ruta de Stockfish y --workers segun la laptop):
-python entrenar.py --out runs/mejoras --init runs/final/ck_150000.pt --resume --algo mixto --start lichess --fens data/fens.txt --stockfish RUTA\stockfish.exe --workers 7 --games 100000 --checkpoint-every 1000 --depth 2 --poda --mates --sf-azar --temp-stockfish 0 --p-completas 0.2 --buffer 2000000 --lr-final 1e-4
-#   Antes: copiar runs/final/ck_150000.pt dentro de runs/mejoras (rival viejo).
-#   --games 100000 es un techo, no una obligacion: se puede cortar con Ctrl+C cuando haga falta (queda
-#   un checkpoint cada 1000 partidas) y seguir despues con --init <ultimo ck> --resume en la misma carpeta.
-#   La GPU no acelera las partidas: la busqueda es Python en CPU y la GPU solo entrena. Mas --workers
-#   (uno por nucleo fisico) es lo que da mas partidas por hora.
-#   Mirar al principio: partidas/h (se esperan unas 8 veces menos que a profundidad 1), que el
-#   "nivel stockfish" suba (arranca en 0, el Stockfish sin azar es el nivel 6) y que |valor| no baje de 0,02.
+# Plan del 15/11 a la noche (ver pendientes 2 y 3). Rutas de Windows; en la Mac, / y /opt/homebrew/bin/stockfish.
+# a) Resultado principal del informe con 100 partidas: antes (ck_000000) y despues (ck_150000) del RL
+mkdir runs\titular
+copy runs\final\ck_000000.pt runs\titular\
+copy runs\final\ck_150000.pt runs\titular\
+python evaluar.py --run runs\titular --games 100 --depth 2 --q 4 --poda --rivals minimax2 --stockfish RUTA\stockfish.exe --sf-nodes 20000
+# b) Corrida con las mejoras a profundidad 2 (la hipotesis principal)
+mkdir runs\mejoras
+copy runs\final\ck_150000.pt runs\mejoras\
+python entrenar.py --out runs\mejoras --init runs\final\ck_150000.pt --resume --algo mixto --start lichess --fens data\fens.txt --stockfish RUTA\stockfish.exe --workers 7 --games 30000 --checkpoint-every 1000 --depth 2 --poda --mates --sf-azar --temp-stockfish 0 --temp-jugadas 10 --p-completas 0.2 --buffer 2000000 --lr-final 1e-4
+#   --games 30000 son unas 2 o 3 noches en la laptop (≈ 1.000 a 1.500 partidas/h a profundidad 2). La tasa baja
+#   de 5e-4 a 1e-4 a lo largo de esas 30.000. Se puede cortar con Ctrl+C y seguir con
+#   --init runs\mejoras\ck_XXXXXX.pt --resume (mismos argumentos): conserva nivel de Stockfish y plan de tasa.
+#   La GPU no acelera las partidas: la busqueda es Python en CPU. Mas --workers (uno por nucleo) da mas partidas/h.
+#   Mirar al principio: partidas/h, que el "nivel stockfish" suba (arranca en 0; el Stockfish sin azar es el
+#   nivel 6) y que |valor| no baje de 0,02.
+# c) Control para separar el efecto de la profundidad (otra maquina, la misma noche): igual que b) pero en
+#    runs\mejoras_d1, sin --depth 2 --poda y con --games 100000 (≈ 10 h a profundidad 1).
 
 # Evaluar esa corrida (misma busqueda que en el entrenamiento, Stockfish por nodos)
 python evaluar.py --run runs/mejoras --games 20 --depth 2 --q 4 --poda --mates --rivals minimax2 --stockfish RUTA --sf-nodes 20000 --every 4
@@ -415,12 +429,11 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 
 1. **Revisar y fusionar la rama `mejoras-meseta`** (cambios en `search.py`, `entrenar.py`, `evaluar.py`,
    `arena.py`; ver 4.3). Elegir el tema RL en la web del curso, si no se hizo.
-2. **Correr `runs/mejoras`** en la laptop con GPU (receta en la sección 7): hasta 100.000 partidas a
-   profundidad 2 con todas las opciones nuevas, tantas como dé el tiempo (se puede cortar y reanudar). Medir
-   partidas/h con las primeras 500: el límite es la CPU, no la GPU. Evaluar un checkpoint cada tanto mientras
-   corre (copiándolo a otra carpeta) para no esperar al final.
-   Si hay una segunda máquina libre, correr en paralelo la misma receta **sin** `--depth 2 --poda` y con
-   `--games 100000` en otra carpeta (`runs/mejoras_d1`): separa el efecto de la profundidad del resto.
+2. **Confirmar el resultado principal** (`runs/titular`, receta a de la sección 7): `ck_000000` y `ck_150000`
+   con 100 partidas contra minimax2 y Stockfish por nodos. Hoy el "antes del RL" (≈ 1020) sale de 20 partidas.
+   **Correr `runs/mejoras`** (receta b): unas 30.000 partidas a profundidad 2 con todas las opciones nuevas.
+   Si hay una segunda máquina, la receta c (`runs/mejoras_d1`) separa el efecto de la profundidad del resto.
+   Evaluar un checkpoint cada tanto mientras corre (copiándolo a otra carpeta) para no esperar al final.
 3. **Evaluar con control**, siempre con 100 partidas en los puntos que se comparan y Stockfish por nodos:
    - `ck_150000` con y sin `--mates` (cuánto aporta solo la búsqueda, sin entrenar nada);
    - `ck_150000` contra el último checkpoint de `runs/mejoras`, los dos con `--mates` (cuánto aporta el
