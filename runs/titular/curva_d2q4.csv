@@ -1,0 +1,3 @@
+checkpoint,partidas_entrenadas,puntaje_minimax2,elo_vs_minimax2,puntaje_stockfish1320n20000,elo_vs_stockfish1320n20000
+ck_000000.pt,0,0.695,143,0.23,-210
+ck_150000.pt,150000,0.835,282,0.295,-151
