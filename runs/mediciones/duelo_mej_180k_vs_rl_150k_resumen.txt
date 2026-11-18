@@ -1,0 +1,4 @@
+mej_180k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de mej_180k: 0.658  IC 95 % [0.641, 0.675]  -> diferencia SIGNIFICATIVA
+  Elo de mej_180k respecto de rl_150k: +114  [+100, +127]
+  partidas: 382 victorias, 552 tablas, 66 derrotas de mej_180k

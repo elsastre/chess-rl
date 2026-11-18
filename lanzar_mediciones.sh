@@ -40,11 +40,13 @@ CKS=("$NBASE=$BASE")
 for k in 200000 250000 300000; do
     [ -f runs/final_sf/ck_$k.pt ] && CKS+=("sf_$((k / 1000))k=runs/final_sf/ck_$k.pt")
 done
+nombre_mej() { echo "mej_$(basename "$1" .pt | sed 's/ck_0*//; s/000$/k/')"; }
 ULT_MEJ=$(ls runs/mejoras/ck_*.pt 2>/dev/null | sort | tail -1)
-for f in $(ls runs/mejoras/ck_*.pt 2>/dev/null | sort | awk 'NR % 10 == 0'); do
-    [ "$f" != "$ULT_MEJ" ] && CKS+=("mej_$(basename "$f" .pt | sed 's/ck_0*//; s/000$/k/')=$f")
+for f in $(ls runs/mejoras/ck_*.pt 2>/dev/null | sort); do       # cada 10.000 (el primero es la copia de 150k)
+    k=$(basename "$f" .pt | sed 's/ck_0*//')
+    [ "$f" != "$ULT_MEJ" ] && [ "$k" != 150000 ] && [ $((k % 10000)) -eq 0 ] && CKS+=("$(nombre_mej "$f")=$f")
 done
-[ -n "$ULT_MEJ" ] && CKS+=("mej_$(basename "$ULT_MEJ" .pt | sed 's/ck_0*//; s/000$/k/')=$ULT_MEJ")
+[ -n "$ULT_MEJ" ] && CKS+=("$(nombre_mej "$ULT_MEJ")=$ULT_MEJ")
 echo "Checkpoints: ${CKS[*]}"
 
 # ---------------------------------------------------------------- 1. prediccion del resultado
@@ -57,6 +59,15 @@ fi
 if [ -f "$PGN" ]; then
     echo; echo "== 1. Prediccion del resultado ($(date)) =="
     caffeinate -i python -u medir_valor.py --pgn "$PGN" --ck "${CKS[@]}" --out "$OUT" --partidas 6000
+    # RL puro: desde pesos al azar (desde_cero, TD-Leaf v1) y TreeStrap puro (colapso), contra la red al azar
+    if [ -f runs/desde_cero/ck_000000.pt ] && [ ! -f "$OUT/desde_cero/valor.csv" ]; then
+        DC=("azar=runs/desde_cero/ck_000000.pt")
+        for k in 005000 010000 020000; do [ -f runs/desde_cero/ck_$k.pt ] && DC+=("td_$((10#$k / 1000))k=runs/desde_cero/ck_$k.pt"); done
+        [ -f runs/treestrap_cero/ck_020000.pt ] && DC+=("treestrap_20k=runs/treestrap_cero/ck_020000.pt")
+        echo; echo "== 1b. Prediccion del resultado, RL desde cero ($(date)) =="
+        caffeinate -i python -u medir_valor.py --pgn "$PGN" --ck "${DC[@]}" --out "$OUT/desde_cero" --partidas 6000
+        python graficar_mediciones.py --dir "$OUT/desde_cero"
+    fi
 fi
 
 # ---------------------------------------------------------------- 2. enfrentamientos directos
@@ -67,12 +78,16 @@ duelo() {   # duelo A nombreA B nombreB
         --poda --workers "$WORKERS" --out "$OUT/duelo_${2}_vs_${4}.csv"
 }
 duelo runs/final/ck_150000.pt rl_150k "$BASE" "$NBASE"                 # lo que aporto el RL
-[ -n "$ULT_MEJ" ] && duelo "$ULT_MEJ" "mej_$(basename "$ULT_MEJ" .pt | sed 's/ck_0*//; s/000$/k/')" runs/final/ck_150000.pt rl_150k
-duelo runs/final_sf/ck_300000.pt sf_300k runs/final/ck_150000.pt rl_150k   # la meseta
+if [ -n "$ULT_MEJ" ]; then
+    duelo "$ULT_MEJ" "$(nombre_mej "$ULT_MEJ")" runs/final/ck_150000.pt rl_150k         # ¿aprendio la corrida con mejoras?
+    duelo "$ULT_MEJ" "$(nombre_mej "$ULT_MEJ")" runs/final_sf/ck_300000.pt sf_300k      # 30.000 a prof. 2 contra 150.000 a prof. 1
+fi
+duelo runs/final_sf/ck_300000.pt sf_300k runs/final/ck_150000.pt rl_150k   # la continuacion
 
 python graficar_mediciones.py --dir "$OUT"
 
 echo; echo "== RESUMEN ($(date)) =="
 [ -f "$OUT/valor_resumen.txt" ] && cat "$OUT/valor_resumen.txt"
+[ -f "$OUT/desde_cero/valor_resumen.txt" ] && { echo; cat "$OUT/desde_cero/valor_resumen.txt"; }
 for f in "$OUT"/duelo_*_resumen.txt; do [ -f "$f" ] && { echo; cat "$f"; }; done
 echo; echo "== Terminado ($(date)) =="

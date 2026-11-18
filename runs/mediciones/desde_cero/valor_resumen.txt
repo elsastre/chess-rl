@@ -1,0 +1,28 @@
+Medicion 1: prediccion del resultado (47484 posiciones de 6000 partidas, data/lichess_db_standard_rated_2013-02.pgn.zst)
+Referencia para las diferencias: azar. IC 95 % por bootstrap de partidas.
+Brier y LogLoss: mas bajo es mejor. AUC: mas alto es mejor. Diferencia significativa si su IC no incluye el 0.
+
+material (sin red)
+   brier    0.1844 [0.1810, 0.1875]   vs ref -0.0583 [-0.0615, -0.0548]  <-- significativa
+   logloss  0.5724 [0.5629, 0.5827]   vs ref -0.1265 [-0.1358, -0.1165]  <-- significativa
+   auc      0.7749 [0.7667, 0.7832]   vs ref +0.2982 [+0.2873, +0.3095]  <-- significativa
+azar
+   brier    0.2427 [0.2413, 0.2438]   vs ref +0.0000 [+0.0000, +0.0000]
+   logloss  0.6990 [0.6983, 0.6996]   vs ref +0.0000 [+0.0000, +0.0000]
+   auc      0.4767 [0.4699, 0.4844]   vs ref +0.0000 [+0.0000, +0.0000]
+td_5k
+   brier    0.2319 [0.2304, 0.2331]   vs ref -0.0108 [-0.0114, -0.0101]  <-- significativa
+   logloss  0.6769 [0.6754, 0.6783]   vs ref -0.0221 [-0.0234, -0.0207]  <-- significativa
+   auc      0.6236 [0.6158, 0.6313]   vs ref +0.1469 [+0.1375, +0.1559]  <-- significativa
+td_10k
+   brier    0.2274 [0.2259, 0.2286]   vs ref -0.0153 [-0.0160, -0.0147]  <-- significativa
+   logloss  0.6673 [0.6658, 0.6686]   vs ref -0.0317 [-0.0331, -0.0304]  <-- significativa
+   auc      0.6623 [0.6544, 0.6697]   vs ref +0.1855 [+0.1761, +0.1945]  <-- significativa
+td_20k
+   brier    0.2166 [0.2150, 0.2178]   vs ref -0.0261 [-0.0271, -0.0252]  <-- significativa
+   logloss  0.6442 [0.6421, 0.6460]   vs ref -0.0548 [-0.0568, -0.0528]  <-- significativa
+   auc      0.7307 [0.7235, 0.7385]   vs ref +0.2540 [+0.2439, +0.2642]  <-- significativa
+treestrap_20k
+   brier    0.2398 [0.2385, 0.2409]   vs ref -0.0029 [-0.0032, -0.0026]  <-- significativa
+   logloss  0.6931 [0.6931, 0.6931]   vs ref -0.0058 [-0.0065, -0.0052]  <-- significativa
+   auc      0.5265 [0.5227, 0.5301]   vs ref +0.0498 [+0.0386, +0.0600]  <-- significativa

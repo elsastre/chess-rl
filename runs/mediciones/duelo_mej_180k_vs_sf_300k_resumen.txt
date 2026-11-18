@@ -1,0 +1,4 @@
+mej_180k contra sf_300k: 500 pares (1000 partidas)
+  puntaje de mej_180k: 0.634  IC 95 % [0.617, 0.651]  -> diferencia SIGNIFICATIVA
+  Elo de mej_180k respecto de sf_300k: +95  [+83, +108]
+  partidas: 343 victorias, 582 tablas, 75 derrotas de mej_180k
