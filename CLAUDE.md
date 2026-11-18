@@ -52,6 +52,10 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 | `arena.py` | Rivales fijos (aleatorio, codicioso, minimax2, Stockfish limitado), `match`, `elo_diff` | estable |
 | `interfaz.py` | Ventana (pygame) para jugar contra un checkpoint, con cara, chance, sorpresa y candidatas | **en uso** |
 | `jugar.py` | Lo mismo en la terminal | en uso |
+| `vision/detectar_jugadas.py` | Detecta las jugadas de un tablero real con la webcam (casillas que cambian + jugadas legales), ventanas de OpenCV | en uso |
+| `chesscam/chesscam.py` | **ChessCam** (aporte de un compañero del grupo, integrado el 17/11): ventana tkinter con tablero digital, calibración con lupa y ajuste automático, detección con color + textura (`board_vision.py`). Contra el bot: flecha con la jugada que hay que hacer en el tablero real, puntos de jugadas legales, pista; también sin cámara (`--sin-camara`) | **en uso** |
+| `chesscam/partida.py` | Turnos contra el bot para ChessCam, sin interfaz (se prueba sola): jugada pendiente, descripción en español, deshacer | en uso |
+| `chesscam/camtest.py` | Diagnóstico: qué índice y backend de cámara entrega imagen (Windows, Mac y Linux) | en uso |
 | `selfplay_td.py` | **v1**: autojuego con TD-Leaf(λ), búsqueda sin quiescencia (corrida `desde_cero`) | histórico, para comparar |
 | `agent.py` | **v1**: `NetSearcher` / `NetPlayer` (búsqueda sin capturas) | histórico |
 | `dataset_lichess.py` | PGN → dataset (posición, resultado) para supervisado | para Valentino |
@@ -219,6 +223,27 @@ Corridas en `runs/`:
 - `emotion(valor, td)`: |td| > 0,16 → sorprendido; si no, con p = (valor + 1) / 2: p ≥ 0,75 ganando,
   ≥ 0,5 confiado, ≥ 0,3 preocupado, si no perdiendo. Son las mismas que usará la cara del robot.
 
+### 3.7 ChessCam: tablero físico o simulador contra el bot (`chesscam/`)
+
+Se corre desde la carpeta del repo como script (`python chesscam/chesscam.py ...`), no con `-m`: así
+`board_vision.py` se encuentra en `chesscam/` y no se confunde con la carpeta `vision/`. La calibración se
+guarda en `chesscam/calib.json` (propia de cada máquina, no se sube).
+
+- **Sin `--ck`**: lo de siempre, seguimiento de una partida entre dos personas.
+- **Con `--ck` y cámara**: el bot **no mueve en la pantalla**. Su jugada queda pendiente y se muestra con una
+  flecha verde (anillo en el origen, anillo rojo si come, segunda flecha para la torre en el enroque, cruz en el
+  peón que se saca al paso) y descrita en el panel ("Caballo de g1 a f3"). Se aplica cuando la cámara la
+  detecta. Si se detecta otra jugada, se avisa y no se aplica (la referencia no cambia: se corrige la pieza y
+  se reevalúa). Botón «Bot: hecha» por si la cámara no la ve.
+- **Con `--ck --sin-camara`**: el simulador solo. Clic en una pieza (puntos en sus destinos legales, anillo si
+  come) y clic en el destino; el bot responde en la pantalla y su flecha queda marcada hasta tu jugada.
+- **Pista**: flecha azul con lo que jugaría el bot en tu lugar. **Deshacer** vuelve a tu turno (deshace
+  también la respuesta del bot).
+- El bot usa `search` con `mates=True` y `poda` a profundidad 2, en un hilo aparte; el panel muestra chance de
+  ganar y emoción (las mismas reglas que 3.6).
+- Probado el 17/11 con la cámara simulada de `vision/prueba_simulada.py`: la jugada equivocada se rechaza, la
+  del bot se acepta y la partida queda igual en pantalla y en el tablero.
+
 ## 4. Resultados hasta ahora (20 partidas por punto)
 
 Desde cero (evaluado con profundidad 1 + q4):
@@ -376,6 +401,9 @@ python arena.py --games 4 --stockfish /opt/homebrew/bin/stockfish
 ```bash
 # Jugar contra el bot final
 python interfaz.py --ck runs/final/ck_150000.pt
+python chesscam/chesscam.py --ck runs/final/ck_150000.pt --sin-camara        # simulador con flechas
+python chesscam/chesscam.py --ck runs/final/ck_150000.pt --bot blancas       # tablero real con webcam
+python chesscam/camtest.py                                                   # si la cámara no abre
 python jugar.py --ck runs/final/ck_150000.pt --color negras
 
 # Continuar el bot final con Stockfish como rival (cada máquina en su propia carpeta)
@@ -447,7 +475,12 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 7. Comparaciones para el informe: λ (0 / 0,7 / 1), TD-Leaf v2 vs mixto, arranque supervisado vs material.
 8. Robot: `robot.py` con `elegir_jugada(tablero) -> (jugada, valor, sorpresa, emocion)`; visión
    `leer_tablero()` / `detectar_jugada()`; cara y voz `mostrar(emocion, texto)`. Cámara a 45 a 50 cm, ≈ 52°.
-9. Informe (marco teórico: MDP, valor, TD(λ), TD-Leaf, TreeStrap, búsqueda minimax, quiescencia y poda
+9. ChessCam: el detector de movimiento de `board_vision.py` (`update`) compara el brillo absoluto entre
+   cuadros, así que un reajuste de exposición de la webcam cuenta como "movimiento" y puede impedir que la
+   imagen se considere quieta. Con una cámara simulada que varía ±3 % el brillo por cuadro, nunca llegó a
+   "settled". Restar la media de cada cuadro antes de comparar (como hace `vision/detectar_jugadas.py`) lo
+   haría robusto. Fijar la exposición de la webcam también lo evita.
+10. Informe (marco teórico: MDP, valor, TD(λ), TD-Leaf, TreeStrap, búsqueda minimax, quiescencia y poda
    alfa-beta; caso de aplicación: el robot) y presentación del 26/11. Incluir la meseta y su diagnóstico
    (4.1 y 4.2) como resultado: duplicar el entrenamiento no cambió la fuerza, y por qué.
 
@@ -462,6 +495,8 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 | El "nivel stockfish" no sube nunca | Sin `--sf-azar` el primer nivel ya es ≈ 1320 de Elo (sección 4.2). Usar `--sf-azar --temp-stockfish 0` |
 | La corrida a profundidad 2 va muy lenta | Falta `--poda` (sin poda es ≈ 30 veces más lenta que profundidad 1; con poda, ≈ 8) |
 | Push rechazado | `git pull --rebase` y `git push` |
+| `No module named '_tkinter'` en la Mac (ChessCam) | El Python de Homebrew no trae tkinter: `brew install python-tk@3.14` (la misma versión que el `.venv`) |
+| ChessCam: `No module named 'board_vision'` | Correrlo como script desde la raíz del repo: `python chesscam/chesscam.py`, no `python -m chesscam.chesscam` |
 | La interfaz no abre ventana | `pip install pygame`; en Mac correrla desde la Terminal con el venv activado |
 | `UCI_Elo` fuera de rango | Algunas versiones de Stockfish tienen otro mínimo; `StockfishPlayer` ya lo ajusta |
 

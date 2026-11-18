@@ -4,3 +4,4 @@ zstandard
 matplotlib
 pygame
 opencv-python
+pillow

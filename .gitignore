@@ -17,3 +17,7 @@ checkpoints/
 # se suben las curvas y logs (sirven para el informe)
 !runs/**/curva*.csv
 !runs/**/curva*.png
+
+# calibraciones de camara (propias de cada maquina)
+chesscam/calib.json
+vision/calibracion_*.json
