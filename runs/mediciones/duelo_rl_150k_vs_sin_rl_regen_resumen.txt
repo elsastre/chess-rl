@@ -1,0 +1,4 @@
+rl_150k contra sin_rl_regen: 500 pares (1000 partidas)
+  puntaje de rl_150k: 0.568  IC 95 % [0.552, 0.583]  -> diferencia SIGNIFICATIVA
+  Elo de rl_150k respecto de sin_rl_regen: +47  [+36, +58]
+  partidas: 215 victorias, 705 tablas, 80 derrotas de rl_150k

@@ -1,7 +1,8 @@
 # CLAUDE.md: robot de ajedrez con aprendizaje por refuerzo
 
 Contexto completo del proyecto para trabajar desde cualquier máquina (Windows con NVIDIA o Mac con Apple Silicon).
-Leer entero antes de tocar código o lanzar corridas. Estado al 15/11/2026 (rama `mejoras-meseta`: ver secciones 4.1 a 4.3 y los pendientes).
+Leer entero antes de tocar código o lanzar corridas. Estado al 18/11/2026: el RL mejora al agente de forma
+significativa y la continuación con Stockfish también (sección 4.4, que corrige a 4.1). Ver los pendientes.
 
 ---
 
@@ -48,6 +49,10 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 | `posiciones_lichess.py` | PGN de Lichess → archivo de FEN (`data/fens.txt`) para arrancar partidas desde posiciones reales | usado |
 | `evaluar.py` | Evalúa checkpoints contra la escalera fija → `curva*.csv`. Opciones nuevas: `--poda`, `--mates`, `--sf-nodes` | **en uso** |
 | `lanzar_final_sf.sh`, `lanzar_mejoras.sh` | Scripts de la Mac: verifican el entorno y lanzan una corrida con `caffeinate` (rutas de Homebrew) | solo Mac |
+| `medir_valor.py` | **Medición 1 (17/11)**: qué tan bien predice cada red el resultado de partidas que no vio (Brier, LogLoss, AUC, calibración), con IC por bootstrap de partidas (sección 4.4) | **en uso** |
+| `duelo.py` | **Medición 2 (17/11)**: enfrentamiento directo entre dos redes con la misma búsqueda, aperturas pareadas (cada una con los dos colores), Elo con IC; reanudable | **en uso** |
+| `graficar_mediciones.py` | Gráfico resumen de 4.4 desde los CSV (`runs/mediciones/resumen_atribucion.png`); lo llama el lanzador | en uso |
+| `lanzar_mediciones.sh` | Corre las dos mediciones en orden en la Mac (regenera la red de material si falta `ck_000000.pt`) | solo Mac |
 | `graficar.py` | `curva*.csv` → `curva.png` (compara corridas) | en uso |
 | `arena.py` | Rivales fijos (aleatorio, codicioso, minimax2, Stockfish limitado), `match`, `elo_diff` | estable |
 | `interfaz.py` | Ventana (pygame) para jugar contra un checkpoint, con cara, chance, sorpresa y candidatas | **en uso** |
@@ -72,9 +77,10 @@ Corridas en `runs/`:
 |---|---|
 | `runs/desde_cero` | v1, TD-Leaf(λ) desde red al azar, 20.000 partidas (`selfplay_td.py`) |
 | `runs/treestrap_cero` | v2, TreeStrap puro desde red al azar, 20.000 partidas: **colapsó** |
-| `runs/final_sf` | Continuación de `final` con Stockfish como rival, 150.000 a 300.000 partidas, corrida en la Mac (M1, ≈ 19.000 partidas/h, 7,8 h). **No mejoró** (sección 4.1) |
+| `runs/final_sf` | Continuación de `final` con Stockfish como rival, 150.000 a 300.000 partidas, corrida en la Mac (M1, ≈ 19.000 partidas/h, 7,8 h). **Mejoró +31 Elo** en enfrentamiento directo contra 150k; contra Stockfish con 100 partidas no se veía (4.1 y 4.4) |
 | `runs/confirmar` | `ck_150000`, `ck_230000` y `ck_300000` de `final_sf` evaluados con 100 partidas por rival |
-| `runs/mejoras` | **Pendiente**: corrida con las mejoras de la sección 4.3 |
+| `runs/mejoras` | Corrida con las mejoras de 4.3, 150.000 a 180.000 partidas a profundidad 2 (laptop con GPU, 15 a 17/11). Solo `log.csv` en git; falta evaluarla |
+| `runs/mediciones` | Mediciones para atribuir al RL (4.4): `valor.csv`, `valor_calibracion.png`, `duelo_*.csv` y resúmenes, `resumen_atribucion.png` |
 | `runs/final` | **Bot final**: init `checkpoints/material.pt`, algo `mixto`, posiciones de Lichess, sin Stockfish, 7 procesos, 150.000 partidas (≈ 12,3 h en la RTX 4050). Checkpoint del robot: `runs/final/ck_150000.pt` |
 
 ## 3. Arquitectura
@@ -273,7 +279,9 @@ Lectura honesta: la mejora contra minimax2 es clara; contra Stockfish los interv
 - **El currículo nunca salió del nivel 0.** En 37.795 partidas contra Stockfish nivel 0 el agente sacó 21 % al
   principio y 22,5 % al final (hace falta más de 60 % para subir).
 - `|valor|` estable en ≈ 0,59 (sin colapso), pérdida estable en ≈ 0,049.
-- **La fuerza no cambió.** Con 100 partidas por punto (`runs/confirmar`, profundidad 2 + q4, en la Mac):
+- **Contra Stockfish no se veía cambio** con 100 partidas por punto (`runs/confirmar`, profundidad 2 + q4, en la Mac).
+  **Corrección (18/11): sí mejoró.** En enfrentamiento directo (1.000 partidas) 300k le gana a 150k por **+31 Elo
+  [+20; +43]**, y predice mejor el resultado (sección 4.4). Esta prueba no tenía potencia para verlo:
 
 | Checkpoint | vs minimax2 | vs Stockfish 1320 | IC Wilson 95 % | Elo estimado |
 |---|---|---|---|---|
@@ -281,8 +289,8 @@ Lectura honesta: la mejora contra minimax2 es clara; contra Stockfish los interv
 | 230.000 | 0,875 | 0,39 | 0,30 a 0,49 | ≈ 1240 |
 | 300.000 | 0,86 | 0,39 | 0,30 a 0,49 | ≈ 1240 |
 
-Juntando las 300 partidas: 0,385, **≈ 1240 de Elo (IC 1200 a 1280)**. Para el robot da igual cuál se use; se
-mantiene `ck_150000.pt`.
+Juntando las 300 partidas: 0,385, **≈ 1240 de Elo (IC 1200 a 1280)**. Con la medición más fina, el mejor
+checkpoint medido para el robot es `runs/final_sf/ck_300000.pt` (o cualquiera desde 200k: 4.4).
 
 **Lección de medición:** las curvas de 20 partidas (`runs/final_sf/curva_d2q4.csv`, `curva_fuerza.png`)
 mostraban un pico de 0,65 en 230.000 y una caída a 0,20 en 300.000. Con 100 partidas el pico desapareció:
@@ -291,6 +299,10 @@ era ruido. No sacar conclusiones de puntos sueltos de 20 partidas.
 Gráficos del log en `runs/final_sf`: `entrenamiento_stockfish.png` y `entrenamiento_loss_valor.png`.
 
 ### 4.2 Diagnóstico: por qué se estancó (15/11, hecho con Claude Fable 5.2 sobre el código y los logs)
+
+**Matiz (18/11):** el estancamiento no fue total. La continuación aprendió algo entre 150k y 200k (+31 Elo,
+AUC +0,008) y desde 200k la predicción ya no mejora (200k, 250k y 300k iguales). Las causas de abajo explican
+por qué no siguió subiendo; lo que estaba mal era la medición que decía "no cambió nada".
 
 Por qué el currículo no se movió:
 
@@ -311,7 +323,7 @@ Por qué no mejoró la fuerza:
 | Entrada incompleta | Sin enroque, al paso, repeticiones ni regla de 50 jugadas |
 | Medición no comparable entre máquinas | Stockfish limitado por tiempo (0,05 s) |
 
-### 4.3 Mejoras implementadas (rama `mejoras-meseta`, todavía sin correr)
+### 4.3 Mejoras implementadas (rama `mejoras-meseta`, fusionada; corrida `runs/mejoras` hecha, sin evaluar)
 
 Todas son opcionales: sin las opciones nuevas el código se comporta como antes.
 
@@ -336,6 +348,55 @@ Stockfish real ni con GPU (se usó un motor falso que juega al azar). La primera
 
 **Expectativa honesta:** es probable que el currículo se mueva y que el agente reciba menos mates. Que eso suba
 el Elo contra Stockfish 1320 es incierto: es la hipótesis que la corrida pone a prueba.
+
+### 4.4 Cómo atribuir la mejora al RL (plan del 17/11)
+
+Atribuir al RL = mostrar que el agente mejora **porque cambiaron los pesos aprendiendo de partidas**, con todo lo
+demás fijo (misma búsqueda, mismo rival, mismas posiciones). Ya hay dos resultados así:
+- `runs/titular` (100 partidas, d2q4): contra minimax2, `ck_000000` 0,695 → `ck_150000` 0,835 (≈ 2,4 errores
+  estándar, p ≈ 0,02). Contra Stockfish 1320 por nodos: 0,23 → 0,295 (no significativo).
+- `runs/desde_cero`: desde pesos al azar (sin saber ni el valor de las piezas) el RL llega de 0,05 a 0,85 contra
+  el codicioso. Todo lo que juega lo aprendió por RL.
+
+Medir contra un tercero con 100 partidas da IC de ± 0,1: no alcanza para diferencias chicas. Dos mediciones
+más sensibles (`lanzar_mediciones.sh` las corre en orden, resultados en `runs/mediciones/`):
+1. **Predicción del resultado** (`medir_valor.py`): el objetivo del TD es predecir quién gana. Posiciones de
+   Lichess de **febrero de 2013** (el entrenamiento usó enero: así la red no "vio el examen"), con los cambios
+   resueltos por quiescencia. Brier y LogLoss (bajo es mejor) y **AUC** (no depende de la escala del valor: si
+   sube, la red ordena mejor las posiciones, no solo se recalibró). IC por bootstrap **por partida**. También
+   la curva de calibración y el predictor de material puro (sin red) como referencia.
+2. **Enfrentamiento directo** (`duelo.py`): A contra B con la misma búsqueda (d2 con poda, sin `--mates`).
+   Las redes son deterministas: desde la posición inicial todas las partidas serían iguales, por eso cada par
+   arranca de una posición real distinta (jugada 5 a 15, material parejo) y se juega con los dos colores. IC
+   por par. 500 pares ≈ 25 min por enfrentamiento en la Mac con 6 procesos; detecta diferencias de ≈ 30 Elo.
+   Control de cordura: una red contra sí misma da 0,500.
+
+Si falta `runs/final/ck_000000.pt`, el lanzador regenera la red de material con `preentrenar_material.py`
+(mismo procedimiento, no los mismos pesos) y la rotula `sin_rl_regen`. Para el informe conviene la original.
+
+**Resultados (17 al 18/11, Mac, línea de base `sin_rl_regen`; gráfico `runs/mediciones/resumen_atribucion.png`):**
+
+| Enfrentamiento directo (500 pares, 1.000 partidas, d2 con poda) | Puntaje de A | IC 95 % | Elo de A |
+|---|---|---|---|
+| RL 150k contra sin RL | 0,568 | [0,552; 0,583] | **+47** [+36; +58] |
+| 300k (continuación) contra 150k | 0,545 | [0,528; 0,562] | **+31** [+20; +43] |
+
+Controles: con blancas 0,561 y con negras 0,574 (los colores no influyen); ninguna partida llegó al tope de 300
+jugadas; ≈ 70 % tablas, todas por triple repetición (dos redes deterministas parecidas repiten posiciones; no
+sesga, el IC se calcula por par).
+
+| Predicción del resultado (47.484 posiciones de 6.000 partidas de febrero de 2013) | AUC | AUC vs sin RL (IC 95 %, pareado) | Brier vs sin RL |
+|---|---|---|---|
+| Material puro (sin red) | 0,775 | +0,003 [+0,000; +0,006] | igual |
+| Sin RL (regenerada) | 0,772 | referencia | referencia |
+| RL 150k | 0,782 | **+0,010** [+0,006; +0,014] | igual (−0,001, no sign.) |
+| 200k / 250k / 300k | 0,790 | **+0,018 a +0,019** [≈ +0,014; +0,023] | **−0,003**, significativa |
+
+Lectura: el RL hace que la red **ordene mejor quién va ganando** que la red de material (AUC, que no depende de
+la escala del valor) y eso se traduce en fuerza (+47 Elo). La continuación suma otro escalón entre 150k y 200k
+y después se estanca. La calibración de todas las redes es buena (`valor_calibracion.png`). Los intervalos de
+cada AUC por separado se superponen, pero la comparación es pareada (mismas posiciones): lo que cuenta es el IC
+de la diferencia. Las mejoras son reales pero moderadas.
 
 ## 5. Decisiones de diseño (y por qué)
 
@@ -435,6 +496,11 @@ python entrenar.py --out runs\mejoras --init runs\final\ck_150000.pt --resume --
 # Evaluar esa corrida (misma busqueda que en el entrenamiento, Stockfish por nodos)
 python evaluar.py --run runs/mejoras --games 20 --depth 2 --q 4 --poda --mates --rivals minimax2 --stockfish RUTA --sf-nodes 20000 --every 4
 
+# Mediciones para atribuir al RL (seccion 4.4); todo queda en runs/mediciones/
+bash lanzar_mediciones.sh                                  # Mac; WORKERS=4 PARES=300 bash ... para ir mas rapido
+python medir_valor.py --pgn data/lichess_db_standard_rated_2013-02.pgn.zst --ck sin_rl=runs/final/ck_000000.pt rl=runs/final/ck_150000.pt
+python duelo.py --a runs/final/ck_150000.pt --b runs/final/ck_000000.pt --pares 500 --poda --out runs/mediciones/duelo_rl_vs_sinrl.csv
+
 # Curvas de una corrida
 python evaluar.py --run runs/final_sf --games 20 --depth 1 --q 4 --every 5
 python evaluar.py --run runs/final_sf --games 20 --depth 2 --q 4 --rivals minimax2 --stockfish /opt/homebrew/bin/stockfish --every 10
@@ -462,6 +528,11 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
    **Correr `runs/mejoras`** (receta b): unas 30.000 partidas a profundidad 2 con todas las opciones nuevas.
    Si hay una segunda máquina, la receta c (`runs/mejoras_d1`) separa el efecto de la profundidad del resto.
    Evaluar un checkpoint cada tanto mientras corre (copiándolo a otra carpeta) para no esperar al final.
+2b. **Mediciones para atribuir al RL** (sección 4.4): primera corrida hecha el 17/11 (resultados en 4.4), con
+   la línea de base regenerada. **Falta**: pasar a la Mac `runs/final/ck_000000.pt` (la original, para el
+   informe) y algunos `runs/mejoras/ck_*.pt` (160k, 170k, 180k) y relanzar `bash lanzar_mediciones.sh`: lo
+   hecho se saltea y se suman "mejoras contra 150k" y todo contra la red original. Comparar también
+   mejoras 180k contra `final_sf` 300k (¿rinden más 30.000 partidas a profundidad 2 que 150.000 a profundidad 1?).
 3. **Evaluar con control**, siempre con 100 partidas en los puntos que se comparan y Stockfish por nodos:
    - `ck_150000` con y sin `--mates` (cuánto aporta solo la búsqueda, sin entrenar nada);
    - `ck_150000` contra el último checkpoint de `runs/mejoras`, los dos con `--mates` (cuánto aporta el
@@ -481,8 +552,10 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
    "settled". Restar la media de cada cuadro antes de comparar (como hace `vision/detectar_jugadas.py`) lo
    haría robusto. Fijar la exposición de la webcam también lo evita.
 10. Informe (marco teórico: MDP, valor, TD(λ), TD-Leaf, TreeStrap, búsqueda minimax, quiescencia y poda
-   alfa-beta; caso de aplicación: el robot) y presentación del 26/11. Incluir la meseta y su diagnóstico
-   (4.1 y 4.2) como resultado: duplicar el entrenamiento no cambió la fuerza, y por qué.
+   alfa-beta; caso de aplicación: el robot) y presentación del 26/11. Resultado principal: el RL mejora al
+   agente (+47 Elo y mejor predicción de quién gana, 4.4); la continuación suma +31 Elo y después se estanca
+   (4.2). Incluir la lección de medición: con 100 partidas contra un tercero no se veía nada, con enfrentamiento
+   directo pareado sí.
 
 ## 9. Problemas conocidos y soluciones
 

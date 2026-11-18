@@ -1,0 +1,217 @@
+== Mediciones (Tue Nov 17 23:41:50 -03 2026) | 6 procesos, 500 aperturas por enfrentamiento ==
+
+== Falta runs/final/ck_000000.pt: regenero la red de material (pocos minutos) ==
+200000 posiciones, calculando objetivos...
+epoca 1: MSE val 0.0875 (linea base 0.3208)
+epoca 2: MSE val 0.1496 (linea base 0.3208)
+epoca 3: MSE val 0.1412 (linea base 0.3208)
+epoca 4: MSE val 0.0586 (linea base 0.3208)
+mejor MSE val 0.0586
+listo -> checkpoints/material_regen.pt
+Linea de base sin RL: checkpoints/material_regen.pt
+Checkpoints: sin_rl_regen=checkpoints/material_regen.pt rl_150k=runs/final/ck_150000.pt sf_200k=runs/final_sf/ck_200000.pt sf_250k=runs/final_sf/ck_250000.pt sf_300k=runs/final_sf/ck_300000.pt
+
+== Bajando partidas de Lichess de febrero de 2013 ==
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0 17.3M    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  1 17.3M    1  303k    0     0   152k      0  0:01:56  0:00:01  0:01:55  152k 15 17.3M   15 2816k    0     0   917k      0  0:00:19  0:00:03  0:00:16  917k 52 17.3M   52 9231k    0     0  2417k      0  0:00:07  0:00:03  0:00:04 2416k 71 17.3M   71 12.3M    0     0  2604k      0  0:00:06  0:00:04  0:00:02 2603k 94 17.3M   94 16.3M    0     0  2831k      0  0:00:06  0:00:05  0:00:01 3373k100 17.3M  100 17.3M    0     0  2995k      0  0:00:05  0:00:05 --:--:-- 4442k
+
+== 1. Prediccion del resultado (Tue Nov 17 23:45:02 -03 2026) ==
+Leyendo data/lichess_db_standard_rated_2013-02.pgn.zst ...
+  1000 partidas, 7914 posiciones
+  2000 partidas, 15821 posiciones
+  3000 partidas, 23714 posiciones
+  4000 partidas, 31629 posiciones
+  5000 partidas, 39536 posiciones
+  6000 partidas, 47484 posiciones
+47484 posiciones de 6000 partidas (17 s). Resultados: 48% gana el que mueve, 4% tablas
+Bootstrap por partida (400 remuestreos)...
+
+Medicion 1: prediccion del resultado (47484 posiciones de 6000 partidas, data/lichess_db_standard_rated_2013-02.pgn.zst)
+Referencia para las diferencias: sin_rl_regen. IC 95 % por bootstrap de partidas.
+Brier y LogLoss: mas bajo es mejor. AUC: mas alto es mejor. Diferencia significativa si su IC no incluye el 0.
+
+material (sin red)
+   brier    0.1844 [0.1810, 0.1875]   vs ref -0.0006 [-0.0016, +0.0004]  (no significativa)
+   logloss  0.5724 [0.5629, 0.5827]   vs ref +0.0041 [+0.0011, +0.0072]  <-- significativa
+   auc      0.7749 [0.7667, 0.7832]   vs ref +0.0032 [+0.0001, +0.0063]  <-- significativa
+sin_rl_regen
+   brier    0.1850 [0.1816, 0.1878]   vs ref +0.0000 [+0.0000, +0.0000]
+   logloss  0.5683 [0.5602, 0.5762]   vs ref +0.0000 [+0.0000, +0.0000]
+   auc      0.7718 [0.7639, 0.7802]   vs ref +0.0000 [+0.0000, +0.0000]
+rl_150k
+   brier    0.1841 [0.1814, 0.1870]   vs ref -0.0009 [-0.0020, +0.0003]  (no significativa)
+   logloss  0.5683 [0.5621, 0.5755]   vs ref +0.0000 [-0.0032, +0.0039]  (no significativa)
+   auc      0.7818 [0.7740, 0.7887]   vs ref +0.0100 [+0.0063, +0.0139]  <-- significativa
+sf_200k
+   brier    0.1820 [0.1794, 0.1848]   vs ref -0.0030 [-0.0043, -0.0018]  <-- significativa
+   logloss  0.5626 [0.5561, 0.5696]   vs ref -0.0057 [-0.0090, -0.0020]  <-- significativa
+   auc      0.7899 [0.7822, 0.7972]   vs ref +0.0182 [+0.0140, +0.0224]  <-- significativa
+sf_250k
+   brier    0.1815 [0.1790, 0.1842]   vs ref -0.0035 [-0.0046, -0.0022]  <-- significativa
+   logloss  0.5612 [0.5551, 0.5683]   vs ref -0.0071 [-0.0104, -0.0033]  <-- significativa
+   auc      0.7906 [0.7830, 0.7972]   vs ref +0.0188 [+0.0147, +0.0228]  <-- significativa
+sf_300k
+   brier    0.1818 [0.1792, 0.1847]   vs ref -0.0032 [-0.0044, -0.0021]  <-- significativa
+   logloss  0.5618 [0.5551, 0.5691]   vs ref -0.0064 [-0.0098, -0.0029]  <-- significativa
+   auc      0.7904 [0.7825, 0.7974]   vs ref +0.0186 [+0.0148, +0.0224]  <-- significativa
+
+listo en 124 s -> runs/mediciones/valor.csv, valor_resumen.txt, valor_calibracion.png
+
+== 2. Enfrentamiento: rl_150k contra sin_rl_regen (Tue Nov 17 23:47:07 -03 2026) ==
+rl_150k contra sin_rl_regen | profundidad 2 con poda | 500 aperturas, faltan 1000 partidas, 6 procesos
+[20/1000] faltan ~52 min | puntaje de rl_150k: 0.575  IC 95 % [0.411, 0.739]  -> diferencia no significativa
+[40/1000] faltan ~52 min | puntaje de rl_150k: 0.566  IC 95 % [0.468, 0.664]  -> diferencia no significativa
+[60/1000] faltan ~48 min | puntaje de rl_150k: 0.586  IC 95 % [0.512, 0.660]  -> diferencia SIGNIFICATIVA
+[80/1000] faltan ~44 min | puntaje de rl_150k: 0.583  IC 95 % [0.520, 0.647]  -> diferencia SIGNIFICATIVA
+[100/1000] faltan ~42 min | puntaje de rl_150k: 0.565  IC 95 % [0.511, 0.619]  -> diferencia SIGNIFICATIVA
+[120/1000] faltan ~40 min | puntaje de rl_150k: 0.576  IC 95 % [0.529, 0.624]  -> diferencia SIGNIFICATIVA
+[140/1000] faltan ~39 min | puntaje de rl_150k: 0.572  IC 95 % [0.527, 0.618]  -> diferencia SIGNIFICATIVA
+[160/1000] faltan ~38 min | puntaje de rl_150k: 0.579  IC 95 % [0.537, 0.621]  -> diferencia SIGNIFICATIVA
+[180/1000] faltan ~37 min | puntaje de rl_150k: 0.579  IC 95 % [0.541, 0.617]  -> diferencia SIGNIFICATIVA
+[200/1000] faltan ~36 min | puntaje de rl_150k: 0.581  IC 95 % [0.545, 0.617]  -> diferencia SIGNIFICATIVA
+[220/1000] faltan ~36 min | puntaje de rl_150k: 0.576  IC 95 % [0.542, 0.610]  -> diferencia SIGNIFICATIVA
+[240/1000] faltan ~35 min | puntaje de rl_150k: 0.579  IC 95 % [0.547, 0.611]  -> diferencia SIGNIFICATIVA
+[260/1000] faltan ~34 min | puntaje de rl_150k: 0.581  IC 95 % [0.550, 0.612]  -> diferencia SIGNIFICATIVA
+[280/1000] faltan ~34 min | puntaje de rl_150k: 0.583  IC 95 % [0.553, 0.612]  -> diferencia SIGNIFICATIVA
+[300/1000] faltan ~33 min | puntaje de rl_150k: 0.586  IC 95 % [0.557, 0.614]  -> diferencia SIGNIFICATIVA
+[320/1000] faltan ~32 min | puntaje de rl_150k: 0.580  IC 95 % [0.552, 0.608]  -> diferencia SIGNIFICATIVA
+[340/1000] faltan ~31 min | puntaje de rl_150k: 0.583  IC 95 % [0.556, 0.610]  -> diferencia SIGNIFICATIVA
+[360/1000] faltan ~30 min | puntaje de rl_150k: 0.587  IC 95 % [0.560, 0.613]  -> diferencia SIGNIFICATIVA
+[380/1000] faltan ~29 min | puntaje de rl_150k: 0.586  IC 95 % [0.560, 0.611]  -> diferencia SIGNIFICATIVA
+[400/1000] faltan ~28 min | puntaje de rl_150k: 0.585  IC 95 % [0.561, 0.610]  -> diferencia SIGNIFICATIVA
+[420/1000] faltan ~27 min | puntaje de rl_150k: 0.585  IC 95 % [0.561, 0.609]  -> diferencia SIGNIFICATIVA
+[440/1000] faltan ~26 min | puntaje de rl_150k: 0.586  IC 95 % [0.563, 0.610]  -> diferencia SIGNIFICATIVA
+[460/1000] faltan ~25 min | puntaje de rl_150k: 0.588  IC 95 % [0.565, 0.611]  -> diferencia SIGNIFICATIVA
+[480/1000] faltan ~24 min | puntaje de rl_150k: 0.583  IC 95 % [0.561, 0.606]  -> diferencia SIGNIFICATIVA
+[500/1000] faltan ~23 min | puntaje de rl_150k: 0.580  IC 95 % [0.558, 0.602]  -> diferencia SIGNIFICATIVA
+[520/1000] faltan ~22 min | puntaje de rl_150k: 0.578  IC 95 % [0.556, 0.601]  -> diferencia SIGNIFICATIVA
+[540/1000] faltan ~21 min | puntaje de rl_150k: 0.578  IC 95 % [0.556, 0.600]  -> diferencia SIGNIFICATIVA
+[560/1000] faltan ~20 min | puntaje de rl_150k: 0.577  IC 95 % [0.555, 0.598]  -> diferencia SIGNIFICATIVA
+[580/1000] faltan ~19 min | puntaje de rl_150k: 0.575  IC 95 % [0.554, 0.596]  -> diferencia SIGNIFICATIVA
+[600/1000] faltan ~18 min | puntaje de rl_150k: 0.576  IC 95 % [0.556, 0.596]  -> diferencia SIGNIFICATIVA
+[620/1000] faltan ~17 min | puntaje de rl_150k: 0.573  IC 95 % [0.553, 0.593]  -> diferencia SIGNIFICATIVA
+[640/1000] faltan ~17 min | puntaje de rl_150k: 0.570  IC 95 % [0.550, 0.589]  -> diferencia SIGNIFICATIVA
+[660/1000] faltan ~16 min | puntaje de rl_150k: 0.571  IC 95 % [0.551, 0.590]  -> diferencia SIGNIFICATIVA
+[680/1000] faltan ~15 min | puntaje de rl_150k: 0.571  IC 95 % [0.551, 0.590]  -> diferencia SIGNIFICATIVA
+[700/1000] faltan ~14 min | puntaje de rl_150k: 0.574  IC 95 % [0.555, 0.593]  -> diferencia SIGNIFICATIVA
+[720/1000] faltan ~13 min | puntaje de rl_150k: 0.575  IC 95 % [0.556, 0.594]  -> diferencia SIGNIFICATIVA
+[740/1000] faltan ~12 min | puntaje de rl_150k: 0.574  IC 95 % [0.556, 0.592]  -> diferencia SIGNIFICATIVA
+[760/1000] faltan ~11 min | puntaje de rl_150k: 0.573  IC 95 % [0.555, 0.591]  -> diferencia SIGNIFICATIVA
+[780/1000] faltan ~10 min | puntaje de rl_150k: 0.571  IC 95 % [0.553, 0.589]  -> diferencia SIGNIFICATIVA
+[800/1000] faltan ~9 min | puntaje de rl_150k: 0.571  IC 95 % [0.554, 0.588]  -> diferencia SIGNIFICATIVA
+[820/1000] faltan ~8 min | puntaje de rl_150k: 0.572  IC 95 % [0.554, 0.589]  -> diferencia SIGNIFICATIVA
+[840/1000] faltan ~7 min | puntaje de rl_150k: 0.572  IC 95 % [0.555, 0.589]  -> diferencia SIGNIFICATIVA
+[860/1000] faltan ~6 min | puntaje de rl_150k: 0.571  IC 95 % [0.554, 0.588]  -> diferencia SIGNIFICATIVA
+[880/1000] faltan ~5 min | puntaje de rl_150k: 0.571  IC 95 % [0.555, 0.588]  -> diferencia SIGNIFICATIVA
+[900/1000] faltan ~5 min | puntaje de rl_150k: 0.570  IC 95 % [0.554, 0.587]  -> diferencia SIGNIFICATIVA
+[920/1000] faltan ~4 min | puntaje de rl_150k: 0.571  IC 95 % [0.555, 0.587]  -> diferencia SIGNIFICATIVA
+[940/1000] faltan ~3 min | puntaje de rl_150k: 0.571  IC 95 % [0.555, 0.587]  -> diferencia SIGNIFICATIVA
+[960/1000] faltan ~2 min | puntaje de rl_150k: 0.571  IC 95 % [0.555, 0.587]  -> diferencia SIGNIFICATIVA
+[980/1000] faltan ~1 min | puntaje de rl_150k: 0.570  IC 95 % [0.554, 0.586]  -> diferencia SIGNIFICATIVA
+[1000/1000] faltan ~0 min | puntaje de rl_150k: 0.568  IC 95 % [0.552, 0.583]  -> diferencia SIGNIFICATIVA
+
+rl_150k contra sin_rl_regen: 500 pares (1000 partidas)
+  puntaje de rl_150k: 0.568  IC 95 % [0.552, 0.583]  -> diferencia SIGNIFICATIVA
+  Elo de rl_150k respecto de sin_rl_regen: +47  [+36, +58]
+  partidas: 215 victorias, 705 tablas, 80 derrotas de rl_150k
+
+== 2. Enfrentamiento: sf_300k contra rl_150k (Wed Nov 18 00:31:58 -03 2026) ==
+sf_300k contra rl_150k | profundidad 2 con poda | 500 aperturas, faltan 1000 partidas, 6 procesos
+[20/1000] faltan ~50 min | puntaje de sf_300k: 0.639  IC 95 % [0.495, 0.783]  -> diferencia no significativa
+[40/1000] faltan ~48 min | puntaje de sf_300k: 0.592  IC 95 % [0.515, 0.669]  -> diferencia SIGNIFICATIVA
+[60/1000] faltan ~48 min | puntaje de sf_300k: 0.558  IC 95 % [0.493, 0.623]  -> diferencia no significativa
+[80/1000] faltan ~47 min | puntaje de sf_300k: 0.577  IC 95 % [0.522, 0.631]  -> diferencia SIGNIFICATIVA
+[100/1000] faltan ~45 min | puntaje de sf_300k: 0.597  IC 95 % [0.546, 0.648]  -> diferencia SIGNIFICATIVA
+[120/1000] faltan ~44 min | puntaje de sf_300k: 0.568  IC 95 % [0.516, 0.619]  -> diferencia SIGNIFICATIVA
+[140/1000] faltan ~44 min | puntaje de sf_300k: 0.565  IC 95 % [0.518, 0.612]  -> diferencia SIGNIFICATIVA
+[160/1000] faltan ~42 min | puntaje de sf_300k: 0.566  IC 95 % [0.523, 0.609]  -> diferencia SIGNIFICATIVA
+[180/1000] faltan ~42 min | puntaje de sf_300k: 0.565  IC 95 % [0.525, 0.604]  -> diferencia SIGNIFICATIVA
+[200/1000] faltan ~41 min | puntaje de sf_300k: 0.557  IC 95 % [0.521, 0.594]  -> diferencia SIGNIFICATIVA
+[220/1000] faltan ~39 min | puntaje de sf_300k: 0.548  IC 95 % [0.512, 0.585]  -> diferencia SIGNIFICATIVA
+[240/1000] faltan ~39 min | puntaje de sf_300k: 0.546  IC 95 % [0.512, 0.580]  -> diferencia SIGNIFICATIVA
+[260/1000] faltan ~38 min | puntaje de sf_300k: 0.541  IC 95 % [0.509, 0.573]  -> diferencia SIGNIFICATIVA
+[280/1000] faltan ~37 min | puntaje de sf_300k: 0.543  IC 95 % [0.513, 0.573]  -> diferencia SIGNIFICATIVA
+[300/1000] faltan ~36 min | puntaje de sf_300k: 0.542  IC 95 % [0.513, 0.571]  -> diferencia SIGNIFICATIVA
+[320/1000] faltan ~35 min | puntaje de sf_300k: 0.547  IC 95 % [0.519, 0.575]  -> diferencia SIGNIFICATIVA
+[340/1000] faltan ~34 min | puntaje de sf_300k: 0.541  IC 95 % [0.514, 0.569]  -> diferencia SIGNIFICATIVA
+[360/1000] faltan ~33 min | puntaje de sf_300k: 0.542  IC 95 % [0.515, 0.568]  -> diferencia SIGNIFICATIVA
+[380/1000] faltan ~32 min | puntaje de sf_300k: 0.538  IC 95 % [0.513, 0.564]  -> diferencia SIGNIFICATIVA
+[400/1000] faltan ~30 min | puntaje de sf_300k: 0.539  IC 95 % [0.514, 0.564]  -> diferencia SIGNIFICATIVA
+[420/1000] faltan ~29 min | puntaje de sf_300k: 0.541  IC 95 % [0.515, 0.566]  -> diferencia SIGNIFICATIVA
+[440/1000] faltan ~28 min | puntaje de sf_300k: 0.543  IC 95 % [0.519, 0.568]  -> diferencia SIGNIFICATIVA
+[460/1000] faltan ~27 min | puntaje de sf_300k: 0.545  IC 95 % [0.521, 0.569]  -> diferencia SIGNIFICATIVA
+[480/1000] faltan ~26 min | puntaje de sf_300k: 0.542  IC 95 % [0.519, 0.565]  -> diferencia SIGNIFICATIVA
+[500/1000] faltan ~25 min | puntaje de sf_300k: 0.540  IC 95 % [0.517, 0.563]  -> diferencia SIGNIFICATIVA
+[520/1000] faltan ~24 min | puntaje de sf_300k: 0.537  IC 95 % [0.515, 0.560]  -> diferencia SIGNIFICATIVA
+[540/1000] faltan ~23 min | puntaje de sf_300k: 0.536  IC 95 % [0.514, 0.558]  -> diferencia SIGNIFICATIVA
+[560/1000] faltan ~22 min | puntaje de sf_300k: 0.539  IC 95 % [0.518, 0.561]  -> diferencia SIGNIFICATIVA
+[580/1000] faltan ~21 min | puntaje de sf_300k: 0.537  IC 95 % [0.516, 0.558]  -> diferencia SIGNIFICATIVA
+[600/1000] faltan ~20 min | puntaje de sf_300k: 0.540  IC 95 % [0.519, 0.561]  -> diferencia SIGNIFICATIVA
+[620/1000] faltan ~19 min | puntaje de sf_300k: 0.542  IC 95 % [0.521, 0.562]  -> diferencia SIGNIFICATIVA
+[640/1000] faltan ~18 min | puntaje de sf_300k: 0.543  IC 95 % [0.523, 0.563]  -> diferencia SIGNIFICATIVA
+[660/1000] faltan ~17 min | puntaje de sf_300k: 0.543  IC 95 % [0.523, 0.563]  -> diferencia SIGNIFICATIVA
+[680/1000] faltan ~16 min | puntaje de sf_300k: 0.544  IC 95 % [0.525, 0.564]  -> diferencia SIGNIFICATIVA
+[700/1000] faltan ~15 min | puntaje de sf_300k: 0.543  IC 95 % [0.524, 0.562]  -> diferencia SIGNIFICATIVA
+[720/1000] faltan ~14 min | puntaje de sf_300k: 0.542  IC 95 % [0.524, 0.561]  -> diferencia SIGNIFICATIVA
+[740/1000] faltan ~13 min | puntaje de sf_300k: 0.542  IC 95 % [0.523, 0.561]  -> diferencia SIGNIFICATIVA
+[760/1000] faltan ~12 min | puntaje de sf_300k: 0.538  IC 95 % [0.520, 0.557]  -> diferencia SIGNIFICATIVA
+[780/1000] faltan ~11 min | puntaje de sf_300k: 0.541  IC 95 % [0.522, 0.560]  -> diferencia SIGNIFICATIVA
+[800/1000] faltan ~10 min | puntaje de sf_300k: 0.542  IC 95 % [0.524, 0.560]  -> diferencia SIGNIFICATIVA
+[820/1000] faltan ~9 min | puntaje de sf_300k: 0.544  IC 95 % [0.526, 0.562]  -> diferencia SIGNIFICATIVA
+[840/1000] faltan ~8 min | puntaje de sf_300k: 0.545  IC 95 % [0.527, 0.563]  -> diferencia SIGNIFICATIVA
+[860/1000] faltan ~7 min | puntaje de sf_300k: 0.547  IC 95 % [0.529, 0.565]  -> diferencia SIGNIFICATIVA
+[880/1000] faltan ~6 min | puntaje de sf_300k: 0.545  IC 95 % [0.527, 0.563]  -> diferencia SIGNIFICATIVA
+[900/1000] faltan ~5 min | puntaje de sf_300k: 0.544  IC 95 % [0.527, 0.562]  -> diferencia SIGNIFICATIVA
+[920/1000] faltan ~4 min | puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+[940/1000] faltan ~3 min | puntaje de sf_300k: 0.547  IC 95 % [0.530, 0.564]  -> diferencia SIGNIFICATIVA
+[960/1000] faltan ~2 min | puntaje de sf_300k: 0.547  IC 95 % [0.531, 0.564]  -> diferencia SIGNIFICATIVA
+[980/1000] faltan ~1 min | puntaje de sf_300k: 0.546  IC 95 % [0.529, 0.563]  -> diferencia SIGNIFICATIVA
+[1000/1000] faltan ~0 min | puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+
+sf_300k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+  Elo de sf_300k respecto de rl_150k: +31  [+20, +43]
+  partidas: 197 victorias, 696 tablas, 107 derrotas de sf_300k
+
+== RESUMEN (Wed Nov 18 01:21:50 -03 2026) ==
+Medicion 1: prediccion del resultado (47484 posiciones de 6000 partidas, data/lichess_db_standard_rated_2013-02.pgn.zst)
+Referencia para las diferencias: sin_rl_regen. IC 95 % por bootstrap de partidas.
+Brier y LogLoss: mas bajo es mejor. AUC: mas alto es mejor. Diferencia significativa si su IC no incluye el 0.
+
+material (sin red)
+   brier    0.1844 [0.1810, 0.1875]   vs ref -0.0006 [-0.0016, +0.0004]  (no significativa)
+   logloss  0.5724 [0.5629, 0.5827]   vs ref +0.0041 [+0.0011, +0.0072]  <-- significativa
+   auc      0.7749 [0.7667, 0.7832]   vs ref +0.0032 [+0.0001, +0.0063]  <-- significativa
+sin_rl_regen
+   brier    0.1850 [0.1816, 0.1878]   vs ref +0.0000 [+0.0000, +0.0000]
+   logloss  0.5683 [0.5602, 0.5762]   vs ref +0.0000 [+0.0000, +0.0000]
+   auc      0.7718 [0.7639, 0.7802]   vs ref +0.0000 [+0.0000, +0.0000]
+rl_150k
+   brier    0.1841 [0.1814, 0.1870]   vs ref -0.0009 [-0.0020, +0.0003]  (no significativa)
+   logloss  0.5683 [0.5621, 0.5755]   vs ref +0.0000 [-0.0032, +0.0039]  (no significativa)
+   auc      0.7818 [0.7740, 0.7887]   vs ref +0.0100 [+0.0063, +0.0139]  <-- significativa
+sf_200k
+   brier    0.1820 [0.1794, 0.1848]   vs ref -0.0030 [-0.0043, -0.0018]  <-- significativa
+   logloss  0.5626 [0.5561, 0.5696]   vs ref -0.0057 [-0.0090, -0.0020]  <-- significativa
+   auc      0.7899 [0.7822, 0.7972]   vs ref +0.0182 [+0.0140, +0.0224]  <-- significativa
+sf_250k
+   brier    0.1815 [0.1790, 0.1842]   vs ref -0.0035 [-0.0046, -0.0022]  <-- significativa
+   logloss  0.5612 [0.5551, 0.5683]   vs ref -0.0071 [-0.0104, -0.0033]  <-- significativa
+   auc      0.7906 [0.7830, 0.7972]   vs ref +0.0188 [+0.0147, +0.0228]  <-- significativa
+sf_300k
+   brier    0.1818 [0.1792, 0.1847]   vs ref -0.0032 [-0.0044, -0.0021]  <-- significativa
+   logloss  0.5618 [0.5551, 0.5691]   vs ref -0.0064 [-0.0098, -0.0029]  <-- significativa
+   auc      0.7904 [0.7825, 0.7974]   vs ref +0.0186 [+0.0148, +0.0224]  <-- significativa
+
+rl_150k contra sin_rl_regen: 500 pares (1000 partidas)
+  puntaje de rl_150k: 0.568  IC 95 % [0.552, 0.583]  -> diferencia SIGNIFICATIVA
+  Elo de rl_150k respecto de sin_rl_regen: +47  [+36, +58]
+  partidas: 215 victorias, 705 tablas, 80 derrotas de rl_150k
+
+sf_300k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+  Elo de sf_300k respecto de rl_150k: +31  [+20, +43]
+  partidas: 197 victorias, 696 tablas, 107 derrotas de sf_300k
+
+== Terminado (Wed Nov 18 01:21:50 -03 2026) ==

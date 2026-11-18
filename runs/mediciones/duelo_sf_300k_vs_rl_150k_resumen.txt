@@ -1,0 +1,4 @@
+sf_300k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+  Elo de sf_300k respecto de rl_150k: +31  [+20, +43]
+  partidas: 197 victorias, 696 tablas, 107 derrotas de sf_300k
