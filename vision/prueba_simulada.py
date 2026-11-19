@@ -4,13 +4,16 @@ atras, como se ve desde una camara inclinada), lo proyecta como lo veria una web
 y juega una partida con enroques, capturas y al paso. Uso: python vision/prueba_simulada.py
 """
 import os, sys, numpy as np, cv2, chess
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # raiz del repo
 import vision.detectar_jugadas as dj
 rng = np.random.default_rng(0)
 S, L = dj.S, dj.LADO
 CAM = [[300, 650], [980, 650], [850, 180], [430, 180]]       # a1, h1, h8, a8 en la imagen de la camara (vista inclinada)
 W, H = 1280, 720
 calib = dj.Calibracion(CAM); calib.fijar_cercania(W, H)
+# (relleno, borde) en BGR de las piezas blancas y negras; chesscam/prueba_robustez.py baja el contraste de las negras
+COLOR_BLANCAS = ((235, 235, 230), (40, 40, 40))
+COLOR_NEGRAS = ((35, 30, 30), (200, 200, 200))
 
 def render(board, mano=None):
     top = np.zeros((L, L, 3), np.uint8)
@@ -31,7 +34,7 @@ def render(board, mano=None):
         bx, by = (f + .5 + .3 * cx_) * S, (7 - r + .5 + .3 * cy_) * S
         alto = {1: .9, 2: 1.1, 3: 1.2, 4: 1.0, 5: 1.4, 6: 1.6}[p.piece_type] * S
         centro = (int(bx - cx_ * alto / 2), int(by - cy_ * alto / 2))
-        c, borde = ((235, 235, 230), (40, 40, 40)) if p.color else ((35, 30, 30), (200, 200, 200))
+        c, borde = COLOR_BLANCAS if p.color else COLOR_NEGRAS
         cv2.ellipse(top, centro, (int(alto / 2), int(.3 * S)), ang, 0, 360, c, -1)
         cv2.ellipse(top, centro, (int(alto / 2), int(.3 * S)), ang, 0, 360, borde, 2)
     img = np.full((H, W, 3), 60, np.uint8)
@@ -59,21 +62,22 @@ def jugar(san_list, fen=None, desordenar=False):
         if det != m: print("   FALLO en", san, "->", det, "|", seg.mensaje)
     return ok, len(san_list), seg
 
-partida = "e4 e5 Nf3 Nc6 Bc4 Nf6 O-O Nxe4 d4 exd4 Re1 d5 Bxd5 Qxd5 Nc3 Qa5 Nxe4 Be6 Neg5 O-O-O Nxe6 fxe6 Rxe6".split()
-ok, n, seg = jugar(partida)
-print(f"partida con enroques y capturas: {ok}/{n} jugadas bien detectadas")
-ok, n, _ = jugar("e4 a6 e5 d5 exd6".split())
-print(f"al paso: {ok}/{n}")
-# una mano que pasa sin mover nada no debe generar jugada
-b = chess.Board(); seg = dj.Seguidor(calib)
-for _ in range(12): seg.procesar(render(b))
-for t in range(8): seg.procesar(render(b, mano=(600, 350)))
-evs = [seg.procesar(render(b))[1] for _ in range(14)]
-print("mano sin jugada -> jugadas detectadas:", sum(e is not None for e in evs), "| referencia ok:", seg.board.fen() == b.fen())
-# jugada ilegal: no se acepta
-b = chess.Board(); seg = dj.Seguidor(calib)
-for _ in range(12): seg.procesar(render(b))
-mal = chess.Board(); mal.set_piece_at(chess.E5, mal.remove_piece_at(chess.E2))   # peon e2 a e5: ilegal
-for t in range(8): seg.procesar(render(mal, mano=(600, 350)))
-evs = [seg.procesar(render(mal))[1] for _ in range(14)]
-print("jugada ilegal -> aceptada:", any(e is not None for e in evs), "|", seg.mensaje)
+if __name__ == "__main__":                                   # importable: render() la usa chesscam/prueba_robustez.py
+    partida = "e4 e5 Nf3 Nc6 Bc4 Nf6 O-O Nxe4 d4 exd4 Re1 d5 Bxd5 Qxd5 Nc3 Qa5 Nxe4 Be6 Neg5 O-O-O Nxe6 fxe6 Rxe6".split()
+    ok, n, seg = jugar(partida)
+    print(f"partida con enroques y capturas: {ok}/{n} jugadas bien detectadas")
+    ok, n, _ = jugar("e4 a6 e5 d5 exd6".split())
+    print(f"al paso: {ok}/{n}")
+    # una mano que pasa sin mover nada no debe generar jugada
+    b = chess.Board(); seg = dj.Seguidor(calib)
+    for _ in range(12): seg.procesar(render(b))
+    for t in range(8): seg.procesar(render(b, mano=(600, 350)))
+    evs = [seg.procesar(render(b))[1] for _ in range(14)]
+    print("mano sin jugada -> jugadas detectadas:", sum(e is not None for e in evs), "| referencia ok:", seg.board.fen() == b.fen())
+    # jugada ilegal: no se acepta
+    b = chess.Board(); seg = dj.Seguidor(calib)
+    for _ in range(12): seg.procesar(render(b))
+    mal = chess.Board(); mal.set_piece_at(chess.E5, mal.remove_piece_at(chess.E2))   # peon e2 a e5: ilegal
+    for t in range(8): seg.procesar(render(mal, mano=(600, 350)))
+    evs = [seg.procesar(render(mal))[1] for _ in range(14)]
+    print("jugada ilegal -> aceptada:", any(e is not None for e in evs), "|", seg.mensaje)
