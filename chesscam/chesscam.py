@@ -8,6 +8,13 @@ Uso (desde la carpeta del repo):
     python chesscam/chesscam.py --ck runs/final/ck_150000.pt              # contra el bot (vos con blancas)
     python chesscam/chesscam.py --ck runs/final/ck_150000.pt --bot blancas
     python chesscam/chesscam.py --ck runs/final/ck_150000.pt --sin-camara # solo el simulador, sin tablero fisico
+    python chesscam/chesscam.py --cam 1 --fijar-camara                    # fija exposición, foco y balance
+    python chesscam/chesscam.py --cam 1 --vision-original                 # el detector de antes del 19/11
+
+Robustez (19/11): la referencia y la imagen que se compara son el promedio de 8 cuadros quietos, se esperan
+2 s antes de la primera referencia, el detector de movimiento ignora el brillo general y la diferencia
+tolera corrimientos de 2 px. Con --fijar-camara, después de 30 cuadros en automático se apagan el autofoco,
+el balance de blancos y la exposición automáticos (si el driver lo permite; en Mac no se puede).
 
 Contra el bot:
   * Con cámara: el bot NO mueve solo. Su jugada aparece como flecha (y descrita en el panel) para que la
@@ -43,7 +50,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 
-from board_vision import BoardVision, pick_move, normalize_scores, WARP, SQ
+from board_vision import BoardVision, pick_move, normalize_scores, WARP, SQ, VISION_ORIGINAL
 from partida import Partida, Bot, san_es
 
 CALIB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calib.json")
@@ -67,8 +74,48 @@ BACKENDS = {
 }
 
 
-def open_camera(index, backend="auto", width=0, height=0, mjpg=False):
-    """Abre la cámara probando varios backends. Imprime el progreso en consola."""
+# Valor de CAP_PROP_AUTO_EXPOSURE que significa "manual" según el backend (no está estandarizado)
+EXPOSICION_MANUAL = {"dshow": 0.25, "msmf": 0.25, "v4l2": 1, "any": 0.25}
+
+
+def fijar_camara(cap, backend, exposicion=None, cuadros=30):
+    """Deja la cámara en automático unos cuadros para que encuentre una buena exposición y después apaga
+    autofoco, balance de blancos y exposición automáticos. Cada driver acepta cosas distintas: se imprime
+    qué quedó (cap.get después de cada cap.set)."""
+    if sys.platform == "darwin":
+        print("[cámara] --fijar-camara: en Mac OpenCV (AVFoundation) no puede cambiar exposición, foco ni "
+              "balance de blancos; la cámara queda en automático.", flush=True)
+        return
+    print(f"[cámara] Fijando la cámara: {cuadros} cuadros en automático para que ajuste la exposición...",
+          flush=True)
+    for _ in range(cuadros):
+        cap.read()
+    pedidos = [("autofoco", cv2.CAP_PROP_AUTOFOCUS, 0),
+               ("balance de blancos automático", cv2.CAP_PROP_AUTO_WB, 0),
+               ("exposición automática", cv2.CAP_PROP_AUTO_EXPOSURE, EXPOSICION_MANUAL.get(backend, 0.25))]
+    if exposicion is not None:
+        pedidos.append(("exposición", cv2.CAP_PROP_EXPOSURE, float(exposicion)))
+    for nombre, prop, valor in pedidos:
+        antes = cap.get(prop)
+        ok = cap.set(prop, valor)
+        ahora = cap.get(prop)
+        if ok and abs(ahora - valor) < 1e-3:
+            estado = "aceptado"
+        elif ok:
+            estado = "el driver dice que sí pero informa otro valor"
+        else:
+            estado = "el driver no lo acepta"
+        print(f"[cámara]   {nombre}: antes {antes:g}, pedido {valor:g}, ahora {ahora:g} ({estado})", flush=True)
+    print(f"[cámara]   exposición que quedó: {cap.get(cv2.CAP_PROP_EXPOSURE):g}"
+          + ("" if exposicion is not None else " (para elegir otra: --exposicion N)"), flush=True)
+    if backend == "msmf":
+        print("[cámara]   con MSMF el significado de la exposición automática varía; si no quedó fija, "
+              "probá --backend dshow", flush=True)
+
+
+def open_camera(index, backend="auto", width=0, height=0, mjpg=False, fijar=False, exposicion=None):
+    """Abre la cámara probando varios backends. Imprime el progreso en consola.
+    fijar: apaga exposición, foco y balance automáticos después de 30 cuadros (ver fijar_camara)."""
     if backend == "auto":
         order = ["dshow", "msmf", "any"] if sys.platform.startswith("win") else ["any"]
     else:
@@ -88,6 +135,8 @@ def open_camera(index, backend="auto", width=0, height=0, mjpg=False):
         ok, frame = cap.read()
         if ok and frame is not None:
             print(f"[cámara]   OK: {frame.shape[1]}x{frame.shape[0]} con '{name}'", flush=True)
+            if fijar or exposicion is not None:
+                fijar_camara(cap, name, exposicion)
             return cap
         print(f"[cámara]   se abrió pero no entrega imágenes con '{name}'", flush=True)
         cap.release()
@@ -309,7 +358,7 @@ class CalibrationWindow:
 
 
 class App:
-    def __init__(self, root, cap, board_px, reopen=None, partida=None):
+    def __init__(self, root, cap, board_px, reopen=None, partida=None, vision_kwargs=None):
         self.root = root
         self.partida = partida or Partida(con_camara=cap is not None)
         board_px = min(board_px, int(root.winfo_screenheight() * 0.82))
@@ -324,7 +373,7 @@ class App:
         self.fail_count = 0
         self.frame_count = 0
 
-        self.vision = BoardVision()
+        self.vision = BoardVision(**(vision_kwargs or {}))
         self.board = self.partida.board            # la misma posicion que lleva la partida
         bot = self.partida.bot
         self.flipped = bot is not None and self.partida.color_bot == chess.WHITE   # la persona abajo
@@ -834,7 +883,7 @@ class App:
         warped, event = self.vision.update(frame)
         self.warped = warped
         if self.vision.reference is None:
-            if self.vision.still_count >= self.vision.stable_frames:
+            if self.vision.listo_para_referencia():          # quieta (y, con la visión nueva, ~2 s después de arrancar)
                 self.set_ref(warped)
                 self.sync_pending = False
                 self.set_status("Listo. Juegan las blancas.")
@@ -940,11 +989,21 @@ def main():
     ap.add_argument("--bot", choices=["blancas", "negras"], default="negras", help="con qué juega el bot")
     ap.add_argument("--depth", type=int, default=2, help="profundidad de búsqueda del bot (1 = rápido y más débil)")
     ap.add_argument("--sin-camara", action="store_true", help="solo el simulador: jugar con clics en la pantalla")
+    ap.add_argument("--fijar-camara", action="store_true",
+                    help="apaga autofoco, balance de blancos y exposición automáticos después de 30 cuadros")
+    ap.add_argument("--exposicion", type=float, default=None,
+                    help="exposición fija (con DirectShow suele ser una potencia de 2 negativa: -5, -6, -7...)")
+    ap.add_argument("--vision-original", action="store_true",
+                    help="el detector de antes del 19/11 (sin promedio, sin espera, sin tolerancias), para comparar")
     args = ap.parse_args()
+    vision_kwargs = dict(VISION_ORIGINAL) if args.vision_original else {}
+    if args.vision_original:
+        print("[visión] detector original (sin promedio, sin espera inicial, sin tolerancias)", flush=True)
 
     cap = None
     if not args.sin_camara:
-        cap = open_camera(args.cam, args.backend, args.width, args.height, args.mjpg)
+        cap = open_camera(args.cam, args.backend, args.width, args.height, args.mjpg,
+                          args.fijar_camara, args.exposicion)
         if cap is None:
             print(f"No se pudo obtener imagen de la cámara {args.cam}. Prueba otro --cam o "
                   "--backend, y cierra otras apps que usen la cámara (Zoom, Teams, Cámara). "
@@ -958,9 +1017,9 @@ def main():
     partida = Partida(bot, chess.WHITE if args.bot == "blancas" else chess.BLACK, con_camara=cap is not None)
 
     root = tk.Tk()
-    app = App(root, cap, args.board, partida=partida,
+    app = App(root, cap, args.board, partida=partida, vision_kwargs=vision_kwargs,
               reopen=lambda: open_camera(args.cam, args.backend, args.width,
-                                         args.height, args.mjpg))
+                                         args.height, args.mjpg, args.fijar_camara, args.exposicion))
     # Permite cerrar con Ctrl+C desde la terminal
     import signal
     signal.signal(signal.SIGINT, lambda *a: app.close())

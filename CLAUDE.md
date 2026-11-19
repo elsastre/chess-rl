@@ -65,6 +65,7 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 | `chesscam/chesscam.py` | **ChessCam** (aporte de un compañero del grupo, integrado el 17/11): ventana tkinter con tablero digital, calibración con lupa y ajuste automático, detección con color + textura (`board_vision.py`). Contra el bot: flecha con la jugada que hay que hacer en el tablero real, puntos de jugadas legales, pista; también sin cámara (`--sin-camara`) | **en uso** |
 | `chesscam/partida.py` | Turnos contra el bot para ChessCam, sin interfaz (se prueba sola): jugada pendiente, descripción en español, deshacer | en uso |
 | `chesscam/camtest.py` | Diagnóstico: qué índice y backend de cámara entrega imagen (Windows, Mac y Linux) | en uso |
+| `chesscam/prueba_robustez.py` | Prueba sin cámara de la detección de ChessCam con exposición, franjas de luz, corrimientos y escena quieta; compara con `--vision-original` (3.7) | en uso |
 | `selfplay_td.py` | **v1**: autojuego con TD-Leaf(λ), búsqueda sin quiescencia (corrida `desde_cero`) | histórico, para comparar |
 | `agent.py` | **v1**: `NetSearcher` / `NetPlayer` (búsqueda sin capturas) | histórico |
 | `dataset_lichess.py` | PGN → dataset (posición, resultado) para supervisado | para Valentino |
@@ -253,6 +254,45 @@ guarda en `chesscam/calib.json` (propia de cada máquina, no se sube).
   ganar y emoción (las mismas reglas que 3.6).
 - Probado el 17/11 con la cámara simulada de `vision/prueba_simulada.py`: la jugada equivocada se rechaza, la
   del bot se acepta y la partida queda igual en pantalla y en el tablero.
+
+**Robustez para una webcam real (19/11, rama `vision-robusta`).** Con la cámara real aparecían "cambios" en
+casillas que nadie tocó: la webcam reajusta sola exposición, foco y balance de blancos, las luces LED
+parpadean (franjas a 50 Hz) y el brazo puede correrse 1 o 2 píxeles. Cambios (todos configurables en el
+constructor de `BoardVision`; `BoardVision(**VISION_ORIGINAL)` es el detector de antes):
+- `promedio=8`: la referencia y la imagen que se compara al quedar quieta son el promedio de los últimos 8
+  cuadros quietos (la vista en pantalla sigue cuadro a cuadro).
+- `espera_inicial=60`: al arrancar o recalibrar se esperan ~2 s antes de la primera referencia.
+- `normalizar_movimiento=True` y `motion_thresh=2.5`: el detector de movimiento resta el brillo medio de cada
+  cuadro y divide por su desvío. En la simulación con todos los problemas, el ruido quieto da < 0,8 y la mano
+  > 3 (antes el ruido llegaba a 8,9 y la mano bajaba a 2,2: se mezclaban).
+- `radio_tolerancia=2`: la diferencia con la referencia es `max(0, nuevo - dilatar(ref)) + max(0,
+  erosionar(ref) - nuevo)` con un núcleo de 5×5 (sobre 60 px por casilla), en L, a, b y el gradiente: un
+  corrimiento de unos píxeles da 0, una pieza que aparece o se va no.
+- Opciones de `chesscam.py`: `--fijar-camara` (30 cuadros en automático y después apaga autofoco, balance de
+  blancos y exposición automática; imprime qué aceptó el driver), `--exposicion N` (valor fijo; con
+  DirectShow suele ser una potencia de 2 negativa: -5, -6, -7) y `--vision-original` (para comparar).
+
+Prueba sin cámara: `python chesscam/prueba_robustez.py [--vision-original]`. Usa la lógica real de la
+aplicación (`App.process` y `App.detect_move`) con la cámara simulada de `vision/prueba_simulada.py`, una
+partida de 23 jugadas (enroques, capturas) y 10 s quieto antes de empezar. Si una jugada no se detecta, se
+carga a mano y se sigue (cada jugada se mide por separado). Resultados (19/11):
+
+| Escenario | Original: bien | Original: avisos / ignoradas / nunca quieta | Nueva: bien | Nueva: avisos |
+|---|---|---|---|---|
+| Sin problemas (sin el ±3 %) | 23/23 | 0 / 0 / 0 | 23/23 | 0 |
+| Solo el ±3 % por cuadro de `prueba_simulada` | **1/23** (nunca toma la referencia) | 0 / 0 / 22 | 23/23 | 0 |
+| (a) Exposición al entrar la mano (ganancia 0,85 a 1,15 y curva que satura) | 22/23 | 1 / 0 / 0 | 23/23 | 0 |
+| (b) Franjas de brillo que se mueven (50 Hz) | 23/23 | 0 / 0 / 0 | **21/23** | 2 |
+| (c) Corrimiento de 1 a 3 px después de cada jugada | **12/23** | 2 / 9 / 0 | 23/23 | 0 |
+| Todos juntos (a + b + c + ±3 %) | **3/23** (nunca toma la referencia) | 1 / 0 / 19 | **21/23** | 2 |
+
+En ningún escenario, en ninguna de las dos versiones, aparecieron jugadas ni avisos en los 10 s quieto, ni se
+detectó una jugada equivocada. "Ignoradas" = la imagen quedó quieta pero el detector tomó el cambio por ruido y
+refrescó la referencia sin avisar (con el corrimiento cambian todas las casillas y la jugada no se destaca).
+La demora desde que sale la mano pasa de ≈ 0,3 s a ≈ 0,4 s. **Punto débil de la versión nueva:** con franjas
+que se mueven hay 2 avisos de "no estoy seguro" que el original no tenía (probablemente porque el promedio de 8
+cuadros mezcla franjas en otra posición que la de la referencia); son avisos, no jugadas equivocadas, y se
+resuelven con un clic. No se probó con una webcam real (el entorno donde se hizo no tiene cámara).
 
 ## 4. Resultados hasta ahora (20 partidas por punto)
 
@@ -565,11 +605,11 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 7. Comparaciones para el informe: λ (0 / 0,7 / 1), TD-Leaf v2 vs mixto, arranque supervisado vs material.
 8. Robot: `robot.py` con `elegir_jugada(tablero) -> (jugada, valor, sorpresa, emocion)`; visión
    `leer_tablero()` / `detectar_jugada()`; cara y voz `mostrar(emocion, texto)`. Cámara a 45 a 50 cm, ≈ 52°.
-9. ChessCam: el detector de movimiento de `board_vision.py` (`update`) compara el brillo absoluto entre
-   cuadros, así que un reajuste de exposición de la webcam cuenta como "movimiento" y puede impedir que la
-   imagen se considere quieta. Con una cámara simulada que varía ±3 % el brillo por cuadro, nunca llegó a
-   "settled". Restar la media de cada cuadro antes de comparar (como hace `vision/detectar_jugadas.py`) lo
-   haría robusto. Fijar la exposición de la webcam también lo evita.
+9. ~~ChessCam: el detector de movimiento compara el brillo absoluto entre cuadros~~ **Resuelto el 19/11** en la
+   rama `vision-robusta` (sección 3.7): movimiento normalizado, promedio de cuadros, espera inicial,
+   diferencia tolerante a corrimientos y `--fijar-camara`. Falta: revisar y fusionar la rama, probarla con la
+   webcam real (vista "Rectificada + cambios": 1 minuto sin jugar, pasar la mano sin tocar nada, 5 jugadas) y
+   mirar los 2 avisos con franjas de luz que se mueven.
 10. Informe (marco teórico: MDP, valor, TD(λ), TD-Leaf, TreeStrap, búsqueda minimax, quiescencia y poda
    alfa-beta; caso de aplicación: el robot) y presentación del 26/11. Relato (4.4): (1) desde cero el RL aprende
    a evaluar casi como el material; (2) desde el material suma +36 Elo y predice mejor quién gana; (3) seguir
@@ -591,6 +631,7 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 | Push rechazado | `git pull --rebase` y `git push` |
 | `No module named '_tkinter'` en la Mac (ChessCam) | El Python de Homebrew no trae tkinter: `brew install python-tk@3.14` (la misma versión que el `.venv`) |
 | ChessCam: `No module named 'board_vision'` | Correrlo como script desde la raíz del repo: `python chesscam/chesscam.py`, no `python -m chesscam.chesscam` |
+| ChessCam: aparecen cambios en casillas que nadie tocó, o tarda en dar la imagen por quieta | La webcam reajusta exposición, foco o balance de blancos. Usar `--fijar-camara` (mira en la terminal qué propiedades aceptó el driver: cada webcam acepta cosas distintas; en Mac no se puede) y, si la imagen queda oscura o clara, `--exposicion N`. Con MSMF el significado de la exposición automática varía: probar `--backend dshow` |
 | La interfaz no abre ventana | `pip install pygame`; en Mac correrla desde la Terminal con el venv activado |
 | `UCI_Elo` fuera de rango | Algunas versiones de Stockfish tienen otro mínimo; `StockfishPlayer` ya lo ajusta |
 

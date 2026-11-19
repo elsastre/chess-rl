@@ -4,7 +4,7 @@ atras, como se ve desde una camara inclinada), lo proyecta como lo veria una web
 y juega una partida con enroques, capturas y al paso. Uso: python vision/prueba_simulada.py
 """
 import os, sys, numpy as np, cv2, chess
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # raiz del repo
 import vision.detectar_jugadas as dj
 rng = np.random.default_rng(0)
 S, L = dj.S, dj.LADO
@@ -59,21 +59,22 @@ def jugar(san_list, fen=None, desordenar=False):
         if det != m: print("   FALLO en", san, "->", det, "|", seg.mensaje)
     return ok, len(san_list), seg
 
-partida = "e4 e5 Nf3 Nc6 Bc4 Nf6 O-O Nxe4 d4 exd4 Re1 d5 Bxd5 Qxd5 Nc3 Qa5 Nxe4 Be6 Neg5 O-O-O Nxe6 fxe6 Rxe6".split()
-ok, n, seg = jugar(partida)
-print(f"partida con enroques y capturas: {ok}/{n} jugadas bien detectadas")
-ok, n, _ = jugar("e4 a6 e5 d5 exd6".split())
-print(f"al paso: {ok}/{n}")
-# una mano que pasa sin mover nada no debe generar jugada
-b = chess.Board(); seg = dj.Seguidor(calib)
-for _ in range(12): seg.procesar(render(b))
-for t in range(8): seg.procesar(render(b, mano=(600, 350)))
-evs = [seg.procesar(render(b))[1] for _ in range(14)]
-print("mano sin jugada -> jugadas detectadas:", sum(e is not None for e in evs), "| referencia ok:", seg.board.fen() == b.fen())
-# jugada ilegal: no se acepta
-b = chess.Board(); seg = dj.Seguidor(calib)
-for _ in range(12): seg.procesar(render(b))
-mal = chess.Board(); mal.set_piece_at(chess.E5, mal.remove_piece_at(chess.E2))   # peon e2 a e5: ilegal
-for t in range(8): seg.procesar(render(mal, mano=(600, 350)))
-evs = [seg.procesar(render(mal))[1] for _ in range(14)]
-print("jugada ilegal -> aceptada:", any(e is not None for e in evs), "|", seg.mensaje)
+if __name__ == "__main__":                                   # importable: render() la usa chesscam/prueba_robustez.py
+    partida = "e4 e5 Nf3 Nc6 Bc4 Nf6 O-O Nxe4 d4 exd4 Re1 d5 Bxd5 Qxd5 Nc3 Qa5 Nxe4 Be6 Neg5 O-O-O Nxe6 fxe6 Rxe6".split()
+    ok, n, seg = jugar(partida)
+    print(f"partida con enroques y capturas: {ok}/{n} jugadas bien detectadas")
+    ok, n, _ = jugar("e4 a6 e5 d5 exd6".split())
+    print(f"al paso: {ok}/{n}")
+    # una mano que pasa sin mover nada no debe generar jugada
+    b = chess.Board(); seg = dj.Seguidor(calib)
+    for _ in range(12): seg.procesar(render(b))
+    for t in range(8): seg.procesar(render(b, mano=(600, 350)))
+    evs = [seg.procesar(render(b))[1] for _ in range(14)]
+    print("mano sin jugada -> jugadas detectadas:", sum(e is not None for e in evs), "| referencia ok:", seg.board.fen() == b.fen())
+    # jugada ilegal: no se acepta
+    b = chess.Board(); seg = dj.Seguidor(calib)
+    for _ in range(12): seg.procesar(render(b))
+    mal = chess.Board(); mal.set_piece_at(chess.E5, mal.remove_piece_at(chess.E2))   # peon e2 a e5: ilegal
+    for t in range(8): seg.procesar(render(mal, mano=(600, 350)))
+    evs = [seg.procesar(render(mal))[1] for _ in range(14)]
+    print("jugada ilegal -> aceptada:", any(e is not None for e in evs), "|", seg.mensaje)

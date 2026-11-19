@@ -13,12 +13,29 @@ Para el problema "pieza negra sobre casilla negra" se combinan varias señales:
     especulares aunque su color medio sea parecido al de la casilla.
 Y aunque una casilla cambie poco, la jugada se deduce igual porque la otra
 casilla implicada sí cambia y el conjunto de jugadas legales es pequeño.
+
+Robustez para una webcam real (19/11, todo configurable en el constructor):
+  * promedio: la referencia y la imagen que se compara son el promedio de los últimos N cuadros quietos
+    (el ruido del sensor y el parpadeo de las luces se promedian);
+  * espera_inicial: al arrancar o recalibrar se esperan unos cuadros antes de la primera referencia, para que
+    la cámara termine de ajustar exposición y foco;
+  * normalizar_movimiento: el detector de movimiento resta el brillo medio de cada cuadro y divide por su
+    desvío, así un reajuste de exposición no cuenta como movimiento;
+  * radio_tolerancia: la diferencia con la referencia tolera corrimientos de unos píxeles (brazo que vibra,
+    foco que cambia): se compara con el mínimo y el máximo de los vecinos en lugar del mismo píxel.
+BoardVision(**VISION_ORIGINAL) vuelve al comportamiento de antes.
 """
+from collections import deque
+
 import numpy as np
 import cv2
 
 WARP = 480            # lado de la imagen rectificada (60 px por casilla)
 SQ = WARP // 8
+
+# Valores que reproducen el detector de antes del 19/11 (para comparar)
+VISION_ORIGINAL = dict(motion_thresh=4.0, promedio=1, espera_inicial=0, normalizar_movimiento=False,
+                       radio_tolerancia=0)
 
 
 def square_name(idx):
@@ -27,7 +44,21 @@ def square_name(idx):
 
 
 class BoardVision:
-    def __init__(self, inner=0.70, motion_thresh=4.0, stable_frames=12):
+    def __init__(self, inner=0.70, motion_thresh=2.5, stable_frames=12, promedio=8, espera_inicial=60,
+                 normalizar_movimiento=True, radio_tolerancia=2):
+        """promedio: cuadros quietos que se promedian para la referencia y la comparación (1 = sin filtro).
+        espera_inicial: cuadros a esperar tras arrancar o recalibrar antes de la primera referencia.
+        normalizar_movimiento: el detector de movimiento ignora el brillo y el contraste generales.
+        radio_tolerancia: píxeles de corrimiento que tolera la diferencia (0 = |nuevo - referencia|).
+        motion_thresh: con el movimiento normalizado, el ruido quieto da < 0,8 y la mano > 3 en la prueba
+        simulada (con exposición, franjas, corrimiento y +-3 %), por eso 2,5; el detector original usaba 4."""
+        self.promedio = max(1, int(promedio))
+        self.espera_inicial = int(espera_inicial)
+        self.normalizar_movimiento = normalizar_movimiento
+        self.radio_tolerancia = int(radio_tolerancia)
+        self.quietos = deque(maxlen=self.promedio)   # últimos cuadros rectificados quietos
+        self.cuadros = 0                             # cuadros desde que se calibró
+        self._banda = {}                             # mínimo y máximo de los vecinos de cada referencia
         self.H = None                 # homografía cámara -> rectificada
         self.Hinv = None
         self.inner = inner            # fracción central de cada casilla que se usa
@@ -55,6 +86,22 @@ class BoardVision:
         self.prev_small = None
         self.empty_feats = None
         self.empty_valid = np.zeros(64, bool)
+        self.quietos.clear()
+        self.cuadros = 0
+        self.still_count = 0
+        self._banda = {}
+
+    def listo_para_referencia(self):
+        """Hay que tomar la primera referencia: pasó la espera inicial y la imagen está quieta."""
+        return self.cuadros >= self.espera_inicial and self.still_count >= self.stable_frames
+
+    def imagen_estable(self, warped):
+        """El promedio de los últimos cuadros quietos (o el cuadro actual si no hay filtro o hubo movimiento)."""
+        if self.promedio <= 1 or not self.quietos:
+            return warped
+        if len(self.quietos) == 1:
+            return self.quietos[0].astype(np.uint8)
+        return np.clip(np.mean(self.quietos, axis=0) + 0.5, 0, 255).astype(np.uint8)
 
     def refine_corners(self, frame, corners, iterations=3):
         """Afina las 4 esquinas usando las intersecciones interiores visibles de la
@@ -148,11 +195,26 @@ class BoardVision:
             "g": grad,
         }
 
+    def _diferencia(self, f_new, f_ref, k):
+        """|nuevo - referencia| del canal k, o con tolerancia a corrimientos:
+           max(0, nuevo - dilatar(ref)) + max(0, erosionar(ref) - nuevo)
+        Si el valor nuevo cae entre el mínimo y el máximo de los vecinos de la referencia (la imagen se corrió
+        unos píxeles o cambió el foco), la diferencia es 0; si apareció o se fue una pieza, no."""
+        if self.radio_tolerancia <= 0:
+            return np.abs(f_new[k] - f_ref[k])
+        clave = (id(f_ref), k)
+        if clave not in self._banda:
+            lado = 2 * self.radio_tolerancia + 1
+            nucleo = np.ones((lado, lado), np.uint8)
+            self._banda[clave] = (cv2.erode(f_ref[k], nucleo), cv2.dilate(f_ref[k], nucleo))
+        bajo, alto = self._banda[clave]
+        return np.maximum(f_new[k] - alto, 0) + np.maximum(bajo - f_new[k], 0)
+
     def square_diffs(self, f_new, f_ref):
         """Vector de 64 valores: cuánto cambió cada casilla."""
-        dL = np.abs(f_new["L"] - f_ref["L"])
-        dC = np.abs(f_new["a"] - f_ref["a"]) + np.abs(f_new["b"] - f_ref["b"])
-        dG = np.abs(f_new["g"] - f_ref["g"])
+        dL = self._diferencia(f_new, f_ref, "L")
+        dC = self._diferencia(f_new, f_ref, "a") + self._diferencia(f_new, f_ref, "b")
+        dG = self._diferencia(f_new, f_ref, "g")
         combo = dL + 1.0 * dC + 0.25 * dG
         m = int(SQ * (1 - self.inner) / 2)
         out = np.zeros(64)
@@ -166,8 +228,10 @@ class BoardVision:
 
     def set_reference(self, warped_bgr, empty_mask=None):
         """empty_mask: 64 booleanos, True = casilla vacía según la partida.
-        Las casillas vacías se guardan como "aspecto de casilla vacía"."""
-        self.reference = self.features(warped_bgr)
+        Las casillas vacías se guardan como "aspecto de casilla vacía".
+        Con promedio > 1 se usa el promedio de los últimos cuadros quietos en lugar de warped_bgr."""
+        self._banda = {}                  # la referencia y el aspecto vacío cambian: recalcular las bandas
+        self.reference = self.features(self.imagen_estable(warped_bgr))
         self.moved_since_ref = False
         if empty_mask is not None:
             if self.empty_feats is None:
@@ -193,22 +257,32 @@ class BoardVision:
            evento = None | 'moving' | 'settled'
            'settled' = la escena volvió a estar quieta después de haber habido movimiento."""
         warped = self.warp(frame)
+        self.cuadros += 1
         small = cv2.cvtColor(cv2.resize(warped, (96, 96)), cv2.COLOR_BGR2GRAY)
         small = cv2.GaussianBlur(small, (5, 5), 0).astype(np.float32)
+        if self.normalizar_movimiento:
+            # sin el brillo ni el contraste generales: un reajuste de exposición no es "movimiento".
+            # La escala (x 50) deja los valores en un rango parecido al de antes.
+            small = (small - small.mean()) / (small.std() + 1e-6) * 50.0
         event = None
+        self.motion = 0.0
         if self.prev_small is not None:
-            motion = np.abs(small - self.prev_small).mean()
+            self.motion = motion = float(np.abs(small - self.prev_small).mean())
             if motion > self.motion_thresh:
                 self.still_count = 0
                 self.moved_since_ref = True
+                self.quietos.clear()
                 event = "moving"
             else:
                 self.still_count += 1
+                if self.promedio > 1:
+                    self.quietos.append(warped.astype(np.float32))
                 if self.moved_since_ref and self.still_count == self.stable_frames:
                     event = "settled"
         self.prev_small = small
         if self.reference is not None:
-            self.last_feats = self.features(warped)
+            # se compara el promedio de los cuadros quietos; la vista en pantalla sigue cuadro a cuadro
+            self.last_feats = self.features(self.imagen_estable(warped))
             self.last_scores = self.square_diffs(self.last_feats, self.reference)
         return warped, event
 
