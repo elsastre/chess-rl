@@ -42,9 +42,10 @@ for k in 200000 250000 300000; do
 done
 nombre_mej() { echo "mej_$(basename "$1" .pt | sed 's/ck_0*//; s/000$/k/')"; }
 ULT_MEJ=$(ls runs/mejoras/ck_*.pt 2>/dev/null | sort | tail -1)
-for f in $(ls runs/mejoras/ck_*.pt 2>/dev/null | sort); do       # cada 10.000 (el primero es la copia de 150k)
-    k=$(basename "$f" .pt | sed 's/ck_0*//')
-    [ "$f" != "$ULT_MEJ" ] && [ "$k" != 150000 ] && [ $((k % 10000)) -eq 0 ] && CKS+=("$(nombre_mej "$f")=$f")
+for f in $(ls runs/mejoras/ck_*.pt 2>/dev/null | sort); do       # cada 10.000, y cada 5.000 desde 180.000
+    k=$(basename "$f" .pt | sed 's/ck_0*//')                      # (el primero es la copia de 150k)
+    { [ $((k % 10000)) -eq 0 ] || { [ "$k" -ge 180000 ] && [ $((k % 5000)) -eq 0 ]; }; } || continue
+    [ "$f" != "$ULT_MEJ" ] && [ "$k" != 150000 ] && CKS+=("$(nombre_mej "$f")=$f")
 done
 [ -n "$ULT_MEJ" ] && CKS+=("$(nombre_mej "$ULT_MEJ")=$ULT_MEJ")
 echo "Checkpoints: ${CKS[*]}"
@@ -79,6 +80,8 @@ duelo() {   # duelo A nombreA B nombreB
 }
 duelo runs/final/ck_150000.pt rl_150k "$BASE" "$NBASE"                 # lo que aporto el RL
 if [ -n "$ULT_MEJ" ]; then
+    # ¿sigue aprendiendo? el ultimo contra 180k (el que ya se midio el 18/11)
+    [ "$ULT_MEJ" != runs/mejoras/ck_180000.pt ] && duelo "$ULT_MEJ" "$(nombre_mej "$ULT_MEJ")" runs/mejoras/ck_180000.pt mej_180k
     duelo "$ULT_MEJ" "$(nombre_mej "$ULT_MEJ")" runs/final/ck_150000.pt rl_150k         # ¿aprendio la corrida con mejoras?
     duelo "$ULT_MEJ" "$(nombre_mej "$ULT_MEJ")" runs/final_sf/ck_300000.pt sf_300k      # 30.000 a prof. 2 contra 150.000 a prof. 1
 fi

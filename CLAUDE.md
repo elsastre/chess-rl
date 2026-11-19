@@ -1,10 +1,11 @@
 # CLAUDE.md: robot de ajedrez con aprendizaje por refuerzo
 
 Contexto completo del proyecto para trabajar desde cualquier máquina (Windows con NVIDIA o Mac con Apple Silicon).
-Leer entero antes de tocar código o lanzar corridas. Estado al 18/11/2026 (sección 4.4): el RL mejora al agente
+Leer entero antes de tocar código o lanzar corridas. Estado al 19/11/2026 (sección 4.4): el RL mejora al agente
 de forma significativa (+36 Elo sobre `ck_000000`), la continuación a profundidad 1 suma poco (+31) y se estanca,
 y la corrida con las mejoras (profundidad 2) da **+114 Elo** sobre 150k y **sigue mejorando**. Mejor red medida:
-`runs/mejoras/ck_180000.pt`. Ver los pendientes.
+`runs/mejoras/ck_180000.pt`. La corrida sigue: ya están 185k, 190k y 195k en la Mac (sin medir) y llega a 210k la
+noche del 19/11. Qué falta y en qué orden: **pendiente 1** (sección 8).
 
 ---
 
@@ -85,7 +86,7 @@ Corridas en `runs/`:
 | `runs/treestrap_cero` | v2, TreeStrap puro desde red al azar, 20.000 partidas: **colapsó** |
 | `runs/final_sf` | Continuación de `final` con Stockfish como rival, 150.000 a 300.000 partidas, corrida en la Mac (M1, ≈ 19.000 partidas/h, 7,8 h). **Mejoró +31 Elo** en enfrentamiento directo contra 150k; contra Stockfish con 100 partidas no se veía (4.1 y 4.4) |
 | `runs/confirmar` | `ck_150000`, `ck_230000` y `ck_300000` de `final_sf` evaluados con 100 partidas por rival |
-| `runs/mejoras` | Corrida con las mejoras de 4.3, 150.000 a 180.000 partidas a profundidad 2 (laptop con GPU, 15 a 17/11). **La mejor**: +114 Elo contra 150k y +95 contra `final_sf` 300k, y la predicción sigue subiendo en cada checkpoint (4.4). **Checkpoint para el robot: `runs/mejoras/ck_180000.pt`** |
+| `runs/mejoras` | Corrida con las mejoras de 4.3, a profundidad 2 en la laptop con GPU: 150.000 a 180.000 (15 a 17/11), sigue hasta 195.000 (19/11) y 210.000 (noche del 19/11; pendiente 1). **La mejor**: +114 Elo contra 150k y +95 contra `final_sf` 300k, y la predicción sigue subiendo en cada checkpoint (4.4). **Checkpoint para el robot: `runs/mejoras/ck_180000.pt`** |
 | `runs/mediciones` | Mediciones para atribuir al RL (4.4): `valor.csv`, `valor_calibracion.png`, `duelo_*.csv` y resúmenes, `resumen_atribucion.png` |
 | `runs/final` | **Bot final**: init `checkpoints/material.pt`, algo `mixto`, posiciones de Lichess, sin Stockfish, 7 procesos, 150.000 partidas (≈ 12,3 h en la RTX 4050). Fue el checkpoint del robot (`ck_150000.pt`) hasta el 18/11 |
 
@@ -295,7 +296,7 @@ que se mueven hay 2 avisos de "no estoy seguro" que el original no tenía (proba
 cuadros mezcla franjas en otra posición que la de la referencia); son avisos, no jugadas equivocadas, y se
 resuelven con un clic. No se probó con una webcam real (el entorno donde se hizo no tiene cámara).
 
-**Detección manual por ráfaga (20/11, por defecto).** Ya no se detecta sola al quedar quieta la imagen: después
+**Detección manual por ráfaga (19/11, por defecto).** Ya no se detecta sola al quedar quieta la imagen: después
 de jugar se pulsa «Detectar jugada» o la barra espaciadora. `BoardVision.iniciar_rafaga(15)` junta 15 cuadros
 quietos (con 3 de margen después del último movimiento; si hay movimiento vuelve a empezar), los combina con la
 **mediana por píxel** y evalúa una vez; esa mediana también queda como referencia siguiente. Si no ve cambios
@@ -305,7 +306,7 @@ casilla se calculan solo en la ráfaga (o en cada cuadro si se mira la vista "Re
 Probado con la webcam real (`--cam 1`, 19/11): funciona; con `calib.json` viejo hubo dudas entre e4 y h4
 (conviene recalibrar al cambiar de cámara o de posición).
 
-**Piezas negras (20/11).** Filtros opcionales en `BoardVision` (apagados por defecto): `gamma_sombras` (gamma
+**Piezas negras (19/11).** Filtros opcionales en `BoardVision` (apagados por defecto): `gamma_sombras` (gamma
 < 1 antes del CLAHE), `peso_textura` (diferencia del desvío local del brillo en 5×5), `peso_grad` y
 `refuerzo_oscuras`. `--filtro-negras` activa `FILTRO_NEGRAS` (gamma 0,6 y textura 0,5, **provisorio**).
 Para elegir con datos reales: `chesscam.py --capturas` guarda cada detección (referencia, imagen, posición y la
@@ -328,6 +329,22 @@ desde que sale la mano pasa a ≈ 0,53 s. El escenario (e) resultó demasiado f�
 automática): todavía no muestra si el filtro ayuda; hace falta uno más difícil o las capturas reales.
 `prueba_robustez.py` acepta `--auto`, `--filtro PARAM=VALOR ...`, `--solo TEXTO` y `--capturas DIR`, y genera el
 ruido con OpenCV en float32 (≈ 1,5 min por escenario en vez de 10).
+
+**Reloj de ajedrez (19/11, `--reloj MIN+INC`, opcional).** Ejemplo: `--reloj 5+3` = 5 minutos por jugador y
+3 s de incremento por jugada (Fischer); también `--reloj 10` o `--reloj 0.5+2`. Corre el reloj del bando que
+tiene que mover. «Detectar jugada» (espacio) hace de botón del reloj: si la cámara confirma una jugada legal, se
+suma el incremento a quien jugó y pasa a correr el del rival; si no ve cambios, no está segura o la jugada es
+ilegal, sigue corriendo el de quien tenía que jugar (como en un reloj real, no se aprieta hasta terminar). Una
+jugada cargada con clic o con «Bot: hecha» también aprieta el reloj. Contra el bot: su reloj corre mientras
+piensa y, con cámara, hasta que la persona hace su jugada en el tablero y la confirma (en el simulador, al
+jugar). Al llegar a 0 pierde ese bando, salvo que al rival no le alcance el material para dar mate
+(`board.has_insufficient_material`): tablas, como en el reglamento FIDE. Con cámara arranca cuando hay
+referencia (y después de sincronizar en una partida nueva); se pausa solo mientras está abierta la calibración y
+con el botón «Pausa». La derrota por tiempo no se deshace (hay que empezar una «Nueva partida»). El PGN guarda
+`Result`, `TimeControl` y `Termination`. Lógica en `partida.py` (`Reloj`, `leer_control`, `formato_tiempo`,
+`Partida.revisar_reloj`, `resultado_pgn`); interfaz en `App.tick_reloj`/`draw_reloj`. Probado con un tiempo
+simulado (incremento, pausa, jugada inválida, bandera, material insuficiente, bot con y sin cámara) y con la
+ventana bajo xvfb; todavía no con la webcam real.
 
 ## 4. Resultados hasta ahora (20 partidas por punto)
 
@@ -563,6 +580,7 @@ python arena.py --games 4 --stockfish /opt/homebrew/bin/stockfish
 python interfaz.py --ck runs/final/ck_150000.pt
 python chesscam/chesscam.py --ck runs/final/ck_150000.pt --sin-camara        # simulador con flechas
 python chesscam/chesscam.py --ck runs/final/ck_150000.pt --bot blancas       # tablero real con webcam
+python chesscam/chesscam.py --ck runs/mejoras/ck_180000.pt --reloj 5+3      # con reloj (5 min + 3 s)
 python chesscam/camtest.py                                                   # si la cámara no abre
 python jugar.py --ck runs/final/ck_150000.pt --color negras
 
@@ -620,12 +638,21 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 
 ## 8. Pendientes (prioridad aproximada)
 
-1. **Seguir `runs/mejoras`** en la laptop con GPU: la predicción sigue subiendo en cada checkpoint. Se reanuda
-   con la receta b de la sección 7 cambiando `--init runs\mejoras\ck_180000.pt` y `--games` a lo que dé el tiempo.
-   Al reanudar conserva el nivel de Stockfish (iba en 8 a 9). Ojo con la tasa: el plan de `--lr-final` (5e-4 a
-   1e-4 en 30.000 partidas) ya terminó, así que sigue en 1e-4 constante, que está bien para afinar; para un plan
-   nuevo, cambiar `--lr`. Cada tanto, pasar los checkpoints nuevos a la Mac y relanzar `bash lanzar_mediciones.sh`:
-   toma el último de `runs/mejoras` y suma sus enfrentamientos contra 150k y 300k. **Cerrar experimentos el 22/11.**
+1. **Terminar `runs/mejoras` y medirla** (la predicción sigue subiendo en cada checkpoint). Plan acordado el 19/11:
+   - **19/11 (Mac):** 185k, 190k y 195k ya están en `runs/mejoras/` de la Mac. Correr `bash lanzar_mediciones.sh`
+     (≈ 2,5 h): predicción de 160k a 195k, y enfrentamientos de 195k contra **180k** (¿sigue aprendiendo?), contra
+     150k y contra 300k. El lanzador elige solo el último checkpoint de `runs/mejoras/` y, desde el 19/11,
+     también lo enfrenta contra `mej_180k` (para la predicción toma cada 10.000, y cada 5.000 desde 180.000).
+     Subir el lanzador con los resultados.
+   - **Noche del 19/11 (laptop con GPU):** la receta b de la sección 7 con `--init runs\mejoras\ck_195000.pt
+     --resume` y `--games 15000`: llega a 210.000. Al reanudar conserva el nivel de Stockfish (iba en 8 a 9). La
+     tasa sigue en 1e-4 constante: el plan de `--lr-final` (5e-4 a 1e-4 en 30.000 partidas, desde 150k) ya
+     terminó, y para afinar está bien; para un plan nuevo, cambiar `--lr`.
+   - **20/11 (Mac):** pasar a `runs/mejoras/` de la Mac al menos `ck_200000.pt`, `ck_205000.pt` y `ck_210000.pt`
+     y relanzar `bash lanzar_mediciones.sh`: suma 210k a la predicción y lo enfrenta contra 180k, 150k y 300k
+     (lo ya hecho se saltea).
+   - **22/11: cierre de experimentos.** Si 210k sigue mejorando y queda una noche antes, se puede estirar; si
+     no, elegir el mejor checkpoint medido para el robot (pendiente 2).
 2. **Usar `runs/mejoras/ck_180000.pt` (o el último medido) en el robot**, `interfaz.py` y ChessCam, con
    `--depth 2` (es la búsqueda con la que entrenó).
 3. **Elo absoluto del mejor checkpoint** (opcional, para la presentación): `evaluar.py` con `--depth 2 --q 4
@@ -642,9 +669,10 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
    `leer_tablero()` / `detectar_jugada()`; cara y voz `mostrar(emocion, texto)`. Cámara a 45 a 50 cm, ≈ 52°.
 9. ~~ChessCam: el detector de movimiento compara el brillo absoluto entre cuadros~~ **Resuelto el 19/11** en la
    rama `vision-robusta` (sección 3.7): movimiento normalizado, promedio de cuadros, espera inicial,
-   diferencia tolerante a corrimientos y `--fijar-camara`. El 20/11 se sumó la detección manual por ráfaga
-   (botón o espacio) y los filtros para piezas negras; con la webcam real (`--cam 1`) funciona. Falta: fusionar
-   la rama; jugar 15 a 20 jugadas con `--capturas` (muchas de negras en casillas oscuras) y elegir el filtro con
+   diferencia tolerante a corrimientos y `--fijar-camara`. El mismo día se sumó la detección manual por ráfaga
+   (botón o espacio) y los filtros para piezas negras; con la webcam real (`--cam 1`) funciona. Rama fusionada
+   en `main` (pull request #2). Falta: jugar 15 a 20 jugadas con `--capturas` (muchas de negras en casillas
+   oscuras) y elegir el filtro con
    `diagnostico_negras.py`; terminar las filas pendientes de `prueba_robustez.py` y hacer un escenario de
    negras más difícil que (e).
 10. Informe (marco teórico: MDP, valor, TD(λ), TD-Leaf, TreeStrap, búsqueda minimax, quiescencia y poda

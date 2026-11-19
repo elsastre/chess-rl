@@ -58,7 +58,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from board_vision import BoardVision, pick_move, normalize_scores, WARP, SQ, VISION_ORIGINAL, FILTRO_NEGRAS
-from partida import Partida, Bot, san_es
+from partida import Partida, Bot, Reloj, san_es, formato_tiempo, leer_control
 
 CALIB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calib.json")
 CORNER_NAMES = ["a1", "h1", "h8", "a8"]
@@ -436,12 +436,30 @@ class App:
         side.pack_propagate(False)      # no crece más que el tablero
         main.rowconfigure(0, weight=1)
 
+        # --- reloj (si se pidió con --reloj): arriba el del bando que está arriba en el tablero
+        self.reloj_lbl = {}
+        if self.partida.reloj is not None:
+            rf = tk.Frame(side, bg="#2b2b2b")
+            rf.pack(fill="x", pady=(0, 6))
+            for fila in (0, 1):
+                caja = tk.Frame(rf)
+                caja.grid(row=fila, column=0, sticky="ew", pady=1)
+                t = tk.Label(caja, text="", font=("Consolas", 22, "bold"), anchor="e", width=7, padx=8)
+                n = tk.Label(caja, text="", font=("Helvetica", 12, "bold"), anchor="w", padx=4)
+                t.pack(side="left")
+                n.pack(side="left", fill="both", expand=True)
+                self.reloj_lbl[fila] = (caja, t, n)
+            self.pausa_btn = ttk.Button(rf, text="Pausa", command=self.pausar_reloj, takefocus=0)
+            self.pausa_btn.grid(row=0, column=1, rowspan=2, sticky="ns", padx=(6, 0), pady=1)
+            rf.columnconfigure(0, weight=1)
+            self.pausa_calib = False     # el reloj se pausó solo al abrir la calibración
+
         # --- jugadas (arriba)
         tk.Label(side, text="Jugadas", fg="white", bg="#2b2b2b",
                  font=("Helvetica", 13, "bold")).pack(anchor="w")
         mv_frame = tk.Frame(side)
         mv_frame.pack(fill="x")
-        self.moves_txt = tk.Text(mv_frame, width=30, height=9, font=("Consolas", 12),
+        self.moves_txt = tk.Text(mv_frame, width=30, height=9 if self.partida.reloj is None else 6, font=("Consolas", 12),
                                  bg="#1e1e1e", fg="#e6e6e6", relief="flat",
                                  state="disabled", wrap="none")
         sb = ttk.Scrollbar(mv_frame, command=self.moves_txt.yview)
@@ -593,8 +611,9 @@ class App:
                       font=("Helvetica", max(14, int(B * 0.055)), "bold"))
         c.create_text(B / 2, y0 + (y1 - y0) * 0.62, text=detalle, fill="white",
                       font=("Helvetica", max(12, int(B * 0.04)), "bold"))
+        seguir = "Nueva partida" if self.partida.tiempo_agotado is not None else "Nueva partida o Deshacer"
         c.create_text(B / 2, y0 + (y1 - y0) * 0.86, fill="#aaaaaa",
-                      text="Clic para ver la posición · Nueva partida o Deshacer para seguir",
+                      text=f"Clic para ver la posición · {seguir} para seguir",
                       font=("Helvetica", max(9, int(B * 0.019))))
 
     def status_fin(self):
@@ -604,7 +623,8 @@ class App:
             return False
         titulo, detalle, tipo = fin
         sep = " " if titulo.endswith("!") else ". "
-        self.set_status(f"{titulo}{sep}{detalle}. Usá «Nueva partida» o «Deshacer» para seguir.", COLOR_FIN[tipo])
+        seguir = "«Nueva partida»" if self.partida.tiempo_agotado is not None else "«Nueva partida» o «Deshacer»"
+        self.set_status(f"{titulo}{sep}{detalle}. Usá {seguir} para seguir.", COLOR_FIN[tipo])
         return True
 
     def sq_center(self, sq):
@@ -686,8 +706,9 @@ class App:
                 lines.append(f"{i // 2 + 1:>3}. {san:<9}")
             else:
                 lines[-1] += f"{san}"
-        if self.board.is_game_over():
-            lines.append(f"\n  {self.board.result()}")
+        if self.partida.terminada():
+            lines.append(f"\n  {self.partida.resultado_pgn()}"
+                         + ("  (por tiempo)" if self.partida.tiempo_agotado is not None else ""))
         t = self.moves_txt
         t.configure(state="normal")
         t.delete("1.0", "end")
@@ -699,7 +720,7 @@ class App:
         sq = self.xy_to_sq(ev.x, ev.y)
         if sq is None:
             return
-        if self.board.is_game_over():              # terminada: el clic oculta el cartel y avisa
+        if self.partida.terminada():               # terminada: el clic oculta el cartel y avisa
             self.cartel = False
             self.selected = None
             self.status_fin()
@@ -768,7 +789,7 @@ class App:
 
     def hint(self):
         p = self.partida
-        if p.bot is None or p.pendiente is not None or p.turno_del_bot() or self.board.is_game_over():
+        if p.bot is None or p.pendiente is not None or p.turno_del_bot() or p.terminada():
             return
         if p.pensar(pista=True):
             self.set_status("Pensando una pista…", "#888")
@@ -784,6 +805,9 @@ class App:
     def undo(self):
         if not self.board.move_stack and self.partida.pendiente is None:
             return
+        if self.partida.tiempo_agotado is not None:       # perder por tiempo no se deshace
+            self.set_status("Se terminó el tiempo: para seguir, empezá una «Nueva partida».", "#f9e2af")
+            return
         self.partida.deshacer()
         self.marcar_captura_deshecha()
         self.selected = None
@@ -798,7 +822,7 @@ class App:
         self.after_human()
 
     def new_game(self):
-        self.partida.nueva()
+        self.partida.nueva()                       # el reloj vuelve al tiempo inicial y arranca al estar listo
         self.selected = None
         self.cartel = True
         self.draw_board()
@@ -825,6 +849,12 @@ class App:
         game = chess.pgn.Game.from_board(self.board)
         game.headers["Event"] = "ChessCam"
         game.headers["Date"] = time.strftime("%Y.%m.%d")
+        game.headers["Result"] = self.partida.resultado_pgn()
+        r = self.partida.reloj
+        if r is not None:
+            game.headers["TimeControl"] = f"{r.base:g}+{r.incremento:g}"
+            if self.partida.tiempo_agotado is not None:
+                game.headers["Termination"] = "time forfeit"
         path = filedialog.asksaveasfilename(defaultextension=".pgn",
                                             filetypes=[("PGN", "*.pgn")])
         if path:
@@ -873,6 +903,7 @@ class App:
     def loop(self):
         try:
             self.poll_bot()
+            self.tick_reloj()
             if self.cap is None:                   # modo simulador: no hay camara que leer
                 return
             ok, frame = self.cap.read()
@@ -905,6 +936,69 @@ class App:
                             "y pásame el mensaje.", "#f38ba8")
         finally:
             self.root.after(30, self.loop)
+
+    # --------------------------------------------------------------- reloj
+    def tick_reloj(self):
+        """Arranca el reloj cuando el tablero está listo, lo pausa durante la calibración, detecta la caída de
+        bandera y actualiza los números."""
+        p, r = self.partida, self.partida.reloj
+        if r is None:
+            return
+        listo = self.cap is None or (self.vision.reference is not None and not self.sync_pending)
+        if not r.iniciado and listo and not p.terminada():
+            r.iniciar(self.board.turn)             # en el tablero físico, recién cuando la cámara tiene referencia
+        if self.calib_win is not None and r.iniciado and not r.pausado:
+            r.pausar()
+            self.pausa_calib = True
+        elif self.calib_win is None and self.pausa_calib:
+            self.pausa_calib = False
+            r.reanudar()
+        if r.iniciado and not r.pausado and self.board.is_game_over():
+            r.pausar()                             # mate, ahogado, etc.: los relojes se detienen
+        if p.revisar_reloj() is not None:          # bandera: termina la partida
+            if self.cap is not None and self.vision.en_rafaga:
+                self.vision.cancelar_rafaga()
+            self.selected = None
+            self.cartel = True
+            self.status_fin()
+            self.draw_board()
+        self.draw_reloj()
+
+    def draw_reloj(self):
+        p, r = self.partida, self.partida.reloj
+        arriba = chess.WHITE if self.flipped else chess.BLACK
+        for fila, color in ((0, arriba), (1, not arriba)):
+            t = r.tiempo(color)
+            activo = r.iniciado and r.corre == color and not p.terminada()
+            nombre = "Blancas" if color == chess.WHITE else "Negras"
+            if p.bot is not None:
+                nombre += " (bot)" if color == p.color_bot else " (vos)"
+            if t <= 0:
+                fg, bg = "white", "#c0392b"
+            elif activo:
+                fg, bg = ("#f38ba8" if t < 10 else "#111111"), "#e6e6e6"
+            else:
+                fg, bg = ("#f38ba8" if t < 10 else "#9a9a9a"), "#1e1e1e"
+            pausa = "\nen pausa" if activo and r.pausado else ""
+            caja, lt, ln = self.reloj_lbl[fila]
+            caja.configure(bg=bg)
+            lt.configure(text=formato_tiempo(t), fg=fg, bg=bg)
+            ln.configure(text=nombre + pausa, fg=fg, bg=bg)
+        fin = p.terminada()
+        self.pausa_btn.configure(text="Reanudar" if r.pausado and not self.pausa_calib and not fin else "Pausa")
+        self.pausa_btn.state(["disabled"] if fin or not r.iniciado else ["!disabled"])
+
+    def pausar_reloj(self):
+        r = self.partida.reloj
+        if r is None or not r.iniciado or self.partida.terminada():
+            return
+        if r.pausado:
+            self.pausa_calib = False
+            r.reanudar()
+            self.set_status("Reloj en marcha.", "#a6e3a1")
+        else:
+            r.pausar()
+            self.set_status("Reloj en pausa: «Reanudar» para seguir.", "#f9e2af")
 
     def process(self, frame):
         # los cambios por casilla se calculan en cada cuadro solo si se están mostrando
@@ -958,6 +1052,9 @@ class App:
         if self.vision.reference is None:
             self.set_status("Todavía no hay referencia: esperá a que la imagen quede quieta.", "#f9e2af")
             return
+        if self.partida.terminada():
+            self.status_fin()
+            return
         if self.partida.pensando:
             self.set_status("Esperá la jugada del bot.", "#f9e2af")
             return
@@ -1000,7 +1097,7 @@ class App:
             return
         # con el botón la persona dice que jugó: se busca igual (pick_move exige un mínimo) y la referencia NO
         # se refresca, para no perder una jugada que cambió poco (pieza negra sobre casilla oscura)
-        if self.board.is_game_over():
+        if self.partida.terminada():
             return
         ed = None
         if self.vision.last_feats is not None:
@@ -1102,6 +1199,10 @@ def main():
     ap.add_argument("--capturas", nargs="?", const="", default=None, metavar="CARPETA",
                     help="guarda cada detección con la jugada real para chesscam/diagnostico_negras.py "
                          "(por defecto en chesscam/capturas/<fecha>)")
+    ap.add_argument("--reloj", default=None, metavar="MIN+INC",
+                    help="reloj de ajedrez: minutos por jugador + segundos de incremento por jugada (ej. 5+3, 10, "
+                         "3+2). «Detectar jugada» (espacio) aprieta el reloj de quien jugó si la cámara confirma la "
+                         "jugada; si no, sigue corriendo el suyo")
     ap.add_argument("--filtro-negras", action="store_true",
                     help="activa el filtro para piezas negras (gamma en las sombras y textura local)")
     args = ap.parse_args()
@@ -1128,11 +1229,20 @@ def main():
                   "Para jugar solo en la pantalla, usa --sin-camara.")
             sys.exit(1)
 
+    reloj = None
+    if args.reloj:
+        try:
+            reloj = Reloj(*leer_control(args.reloj))
+        except ValueError as e:
+            ap.error(str(e))
+        print(f"[reloj] {reloj.base / 60:g} min + {reloj.incremento:g} s por jugada", flush=True)
+
     bot = None
     if args.ck:
         print(f"[bot] cargando {args.ck} (profundidad {args.depth})...", flush=True)
         bot = Bot(args.ck, args.depth)
-    partida = Partida(bot, chess.WHITE if args.bot == "blancas" else chess.BLACK, con_camara=cap is not None)
+    partida = Partida(bot, chess.WHITE if args.bot == "blancas" else chess.BLACK, con_camara=cap is not None,
+                      reloj=reloj)
 
     root = tk.Tk()
     app = App(root, cap, args.board, partida=partida, vision_kwargs=vision_kwargs,
