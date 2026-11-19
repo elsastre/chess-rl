@@ -20,4 +20,5 @@ checkpoints/
 
 # calibraciones de camara (propias de cada maquina)
 chesscam/calib.json
+chesscam/capturas/
 vision/calibracion_*.json

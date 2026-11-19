@@ -24,6 +24,18 @@ Robustez para una webcam real (19/11, todo configurable en el constructor):
   * radio_tolerancia: la diferencia con la referencia tolera corrimientos de unos píxeles (brazo que vibra,
     foco que cambia): se compara con el mínimo y el máximo de los vecinos en lugar del mismo píxel.
 BoardVision(**VISION_ORIGINAL) vuelve al comportamiento de antes.
+
+Detección manual por ráfaga (20/11): iniciar_rafaga(n) junta los próximos n cuadros quietos y usa su mediana
+por píxel (más robusta que el promedio contra reflejos y franjas que pasan) para comparar y como referencia
+siguiente. ChessCam la usa con el botón «Detectar jugada».
+
+Filtros opcionales para piezas negras (20/11, apagados por defecto; se eligen midiendo con
+chesscam/diagnostico_negras.py):
+  * gamma_sombras < 1 abre los tonos oscuros antes del CLAHE (una pieza negra sobre casilla oscura gana
+    contraste);
+  * peso_textura > 0 suma la diferencia de la textura local (desvío del brillo en 5x5): una pieza tiene bordes
+    y brillos aunque su color medio sea el de la casilla;
+  * refuerzo_oscuras > 0 multiplica el cambio de las casillas oscuras de la referencia por (1 + refuerzo).
 """
 from collections import deque
 
@@ -32,6 +44,9 @@ import cv2
 
 WARP = 480            # lado de la imagen rectificada (60 px por casilla)
 SQ = WARP // 8
+
+# Filtro para piezas negras que activa chesscam.py --filtro-negras (provisorio: se elige con diagnostico_negras.py)
+FILTRO_NEGRAS = dict(gamma_sombras=0.6, peso_textura=0.5)
 
 # Valores que reproducen el detector de antes del 19/11 (para comparar)
 VISION_ORIGINAL = dict(motion_thresh=4.0, promedio=1, espera_inicial=0, normalizar_movimiento=False,
@@ -45,13 +60,23 @@ def square_name(idx):
 
 class BoardVision:
     def __init__(self, inner=0.70, motion_thresh=2.5, stable_frames=12, promedio=8, espera_inicial=60,
-                 normalizar_movimiento=True, radio_tolerancia=2):
+                 normalizar_movimiento=True, radio_tolerancia=2, gamma_sombras=1.0, peso_grad=0.25,
+                 peso_textura=0.0, refuerzo_oscuras=0.0):
         """promedio: cuadros quietos que se promedian para la referencia y la comparación (1 = sin filtro).
         espera_inicial: cuadros a esperar tras arrancar o recalibrar antes de la primera referencia.
         normalizar_movimiento: el detector de movimiento ignora el brillo y el contraste generales.
         radio_tolerancia: píxeles de corrimiento que tolera la diferencia (0 = |nuevo - referencia|).
         motion_thresh: con el movimiento normalizado, el ruido quieto da < 0,8 y la mano > 3 en la prueba
-        simulada (con exposición, franjas, corrimiento y +-3 %), por eso 2,5; el detector original usaba 4."""
+        simulada (con exposición, franjas, corrimiento y +-3 %), por eso 2,5; el detector original usaba 4.
+        gamma_sombras, peso_grad, peso_textura, refuerzo_oscuras: filtros para piezas negras (ver arriba)."""
+        self.gamma_sombras = float(gamma_sombras)
+        self.peso_grad = float(peso_grad)
+        self.peso_textura = float(peso_textura)
+        self.refuerzo_oscuras = float(refuerzo_oscuras)
+        self.rafaga_n = 0                            # cuadros que faltan juntar (0 = no hay ráfaga en curso)
+        self.rafaga = []                             # cuadros rectificados de la ráfaga en curso
+        self.imagen_rafaga = None                    # mediana de la última ráfaga (hasta que haya movimiento)
+        self.reference_img = None                    # imagen rectificada de la referencia (para diagnóstico)
         self.promedio = max(1, int(promedio))
         self.espera_inicial = int(espera_inicial)
         self.normalizar_movimiento = normalizar_movimiento
@@ -90,13 +115,33 @@ class BoardVision:
         self.cuadros = 0
         self.still_count = 0
         self._banda = {}
+        self.cancelar_rafaga()
+        self.imagen_rafaga = None
+
+    # ---------- ráfaga (detección manual) ----------
+    def iniciar_rafaga(self, n=15):
+        """Empieza a juntar n cuadros quietos; update() devuelve el evento 'rafaga' al completarlos."""
+        self.rafaga_n = max(1, int(n))
+        self.rafaga = []
+        self.imagen_rafaga = None
+
+    def cancelar_rafaga(self):
+        self.rafaga_n = 0
+        self.rafaga = []
+
+    @property
+    def en_rafaga(self):
+        return self.rafaga_n > 0
 
     def listo_para_referencia(self):
         """Hay que tomar la primera referencia: pasó la espera inicial y la imagen está quieta."""
         return self.cuadros >= self.espera_inicial and self.still_count >= self.stable_frames
 
     def imagen_estable(self, warped):
-        """El promedio de los últimos cuadros quietos (o el cuadro actual si no hay filtro o hubo movimiento)."""
+        """La mediana de la última ráfaga si la hay; si no, el promedio de los últimos cuadros quietos (o el
+        cuadro actual si no hay filtro o hubo movimiento)."""
+        if self.imagen_rafaga is not None:
+            return self.imagen_rafaga
         if self.promedio <= 1 or not self.quietos:
             return warped
         if len(self.quietos) == 1:
@@ -182,18 +227,29 @@ class BoardVision:
         # que una casilla) apenas mueve ese fondo y se conserva.
         Lr = lab[:, :, 0]
         illum = cv2.GaussianBlur(Lr, (0, 0), SQ * 1.2)
-        Ln = np.clip(Lr / (illum + 8.0) * 110.0, 0, 255).astype(np.uint8)
-        L = self.clahe.apply(Ln)
+        Ln = np.clip(Lr / (illum + 8.0) * 110.0, 0, 255)
+        if self.gamma_sombras != 1.0:
+            # abre los tonos oscuros: con gamma < 1 una diferencia chica entre negro y marrón oscuro se agranda
+            Ln = 255.0 * (Ln / 255.0) ** self.gamma_sombras
+        L = self.clahe.apply(Ln.astype(np.uint8))
         gx = cv2.Sobel(L, cv2.CV_32F, 1, 0, ksize=3)
         gy = cv2.Sobel(L, cv2.CV_32F, 0, 1, ksize=3)
         grad = cv2.magnitude(gx, gy)
         a, b = lab[:, :, 1], lab[:, :, 2]
-        return {
+        out = {
             "L": L.astype(np.float32),
             "a": a - np.median(a),          # quita derivas del balance de blancos
             "b": b - np.median(b),
             "g": grad,
         }
+        if self.peso_textura > 0:
+            # textura local: desvío del brillo en una ventana de 5x5 (alto en bordes y brillos de una pieza)
+            Lf = out["L"]
+            m = cv2.blur(Lf, (5, 5))
+            out["t"] = np.sqrt(np.maximum(cv2.blur(Lf * Lf, (5, 5)) - m * m, 0))
+        if self.refuerzo_oscuras > 0:
+            out["oscura"] = Lr               # brillo sin normalizar, para saber qué casillas son oscuras
+        return out
 
     def _diferencia(self, f_new, f_ref, k):
         """|nuevo - referencia| del canal k, o con tolerancia a corrimientos:
@@ -210,28 +266,56 @@ class BoardVision:
         bajo, alto = self._banda[clave]
         return np.maximum(f_new[k] - alto, 0) + np.maximum(bajo - f_new[k], 0)
 
-    def square_diffs(self, f_new, f_ref):
-        """Vector de 64 valores: cuánto cambió cada casilla."""
-        dL = self._diferencia(f_new, f_ref, "L")
-        dC = self._diferencia(f_new, f_ref, "a") + self._diferencia(f_new, f_ref, "b")
-        dG = self._diferencia(f_new, f_ref, "g")
-        combo = dL + 1.0 * dC + 0.25 * dG
+    def _por_casilla(self, mapa):
+        """Mapa de diferencias (WARP x WARP) -> 64 valores, mirando la parte central de cada casilla."""
         m = int(SQ * (1 - self.inner) / 2)
         out = np.zeros(64)
         for idx in range(64):
             f, r = idx % 8, idx // 8
             x0, y0 = f * SQ, (7 - r) * SQ
-            patch = combo[y0 + m:y0 + SQ - m, x0 + m:x0 + SQ - m]
+            patch = mapa[y0 + m:y0 + SQ - m, x0 + m:x0 + SQ - m]
             # percentil alto: una pieza ocupa solo parte de la casilla
             out[idx] = 0.5 * patch.mean() + 0.5 * np.percentile(patch, 80)
         return out
+
+    def oscuridad_casillas(self, f_ref):
+        """64 valores en [0, 1]: 1 = casilla (con lo que tenga encima) oscura en la referencia."""
+        if "oscura" not in f_ref:
+            return None
+        Lm = cv2.resize(f_ref["oscura"], (8, 8), interpolation=cv2.INTER_AREA)
+        lum = np.array([Lm[7 - idx // 8, idx % 8] for idx in range(64)])
+        lo, hi = np.percentile(lum, 10), np.percentile(lum, 90)
+        return np.clip((hi - lum) / max(hi - lo, 1e-6), 0, 1)
+
+    def square_diffs_canales(self, f_new, f_ref):
+        """Cuánto cambió cada casilla, por canal: {'L', 'C' (a+b), 'G' (gradiente), ['T' (textura)], 'total'}."""
+        dL = self._diferencia(f_new, f_ref, "L")
+        dC = self._diferencia(f_new, f_ref, "a") + self._diferencia(f_new, f_ref, "b")
+        dG = self._diferencia(f_new, f_ref, "g")
+        combo = dL + 1.0 * dC + self.peso_grad * dG
+        out = {"L": self._por_casilla(dL), "C": self._por_casilla(dC), "G": self._por_casilla(dG)}
+        if self.peso_textura > 0 and "t" in f_new and "t" in f_ref:
+            dT = self._diferencia(f_new, f_ref, "t")
+            combo = combo + self.peso_textura * dT
+            out["T"] = self._por_casilla(dT)
+        total = self._por_casilla(combo)
+        osc = self.oscuridad_casillas(f_ref) if self.refuerzo_oscuras > 0 else None
+        if osc is not None:
+            total = total * (1.0 + self.refuerzo_oscuras * osc)
+        out["total"] = total
+        return out
+
+    def square_diffs(self, f_new, f_ref):
+        """Vector de 64 valores: cuánto cambió cada casilla."""
+        return self.square_diffs_canales(f_new, f_ref)["total"]
 
     def set_reference(self, warped_bgr, empty_mask=None):
         """empty_mask: 64 booleanos, True = casilla vacía según la partida.
         Las casillas vacías se guardan como "aspecto de casilla vacía".
         Con promedio > 1 se usa el promedio de los últimos cuadros quietos en lugar de warped_bgr."""
         self._banda = {}                  # la referencia y el aspecto vacío cambian: recalcular las bandas
-        self.reference = self.features(self.imagen_estable(warped_bgr))
+        self.reference_img = self.imagen_estable(warped_bgr).copy()
+        self.reference = self.features(self.reference_img)
         self.moved_since_ref = False
         if empty_mask is not None:
             if self.empty_feats is None:
@@ -252,10 +336,13 @@ class BoardVision:
         return self.square_diffs(feats, self.empty_feats)
 
     # ---------- bucle por frame ----------
-    def update(self, frame):
+    def update(self, frame, puntajes=True):
         """Procesa un frame. Devuelve (warped, evento):
            evento = None | 'moving' | 'settled'
-           'settled' = la escena volvió a estar quieta después de haber habido movimiento."""
+           'settled' = la escena volvió a estar quieta después de haber habido movimiento.
+           'rafaga'  = se completó la ráfaga pedida con iniciar_rafaga(); last_scores sale de su mediana.
+        puntajes=False: last_scores y last_feats se calculan solo en los eventos 'settled' y 'rafaga' (los únicos
+        en que se usan para decidir); con True, en cada cuadro (para la vista "Rectificada + cambios")."""
         warped = self.warp(frame)
         self.cuadros += 1
         small = cv2.cvtColor(cv2.resize(warped, (96, 96)), cv2.COLOR_BGR2GRAY)
@@ -272,6 +359,9 @@ class BoardVision:
                 self.still_count = 0
                 self.moved_since_ref = True
                 self.quietos.clear()
+                self.imagen_rafaga = None
+                if self.rafaga_n:
+                    self.rafaga = []          # la ráfaga vuelve a empezar cuando la imagen quede quieta
                 event = "moving"
             else:
                 self.still_count += 1
@@ -279,8 +369,14 @@ class BoardVision:
                     self.quietos.append(warped.astype(np.float32))
                 if self.moved_since_ref and self.still_count == self.stable_frames:
                     event = "settled"
+                if self.rafaga_n and self.still_count >= 3:      # 3 cuadros de margen tras el movimiento
+                    self.rafaga.append(warped)
+                    if len(self.rafaga) >= self.rafaga_n:
+                        self.imagen_rafaga = np.median(np.stack(self.rafaga), axis=0).astype(np.uint8)
+                        self.cancelar_rafaga()
+                        event = "rafaga"
         self.prev_small = small
-        if self.reference is not None:
+        if self.reference is not None and (puntajes or event in ("settled", "rafaga")):
             # se compara el promedio de los cuadros quietos; la vista en pantalla sigue cuadro a cuadro
             self.last_feats = self.features(self.imagen_estable(warped))
             self.last_scores = self.square_diffs(self.last_feats, self.reference)

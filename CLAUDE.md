@@ -65,7 +65,8 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 | `chesscam/chesscam.py` | **ChessCam** (aporte de un compañero del grupo, integrado el 17/11): ventana tkinter con tablero digital, calibración con lupa y ajuste automático, detección con color + textura (`board_vision.py`). Contra el bot: flecha con la jugada que hay que hacer en el tablero real, puntos de jugadas legales, pista; también sin cámara (`--sin-camara`) | **en uso** |
 | `chesscam/partida.py` | Turnos contra el bot para ChessCam, sin interfaz (se prueba sola): jugada pendiente, descripción en español, deshacer | en uso |
 | `chesscam/camtest.py` | Diagnóstico: qué índice y backend de cámara entrega imagen (Windows, Mac y Linux) | en uso |
-| `chesscam/prueba_robustez.py` | Prueba sin cámara de la detección de ChessCam con exposición, franjas de luz, corrimientos y escena quieta; compara con `--vision-original` (3.7) | en uso |
+| `chesscam/prueba_robustez.py` | Prueba sin cámara de la detección de ChessCam con exposición, franjas de luz, corrimientos, escena quieta y piezas negras con poco contraste; detección manual o `--auto`, filtros con `--filtro` (3.7) | en uso |
+| `chesscam/diagnostico_negras.py` | Sobre capturas guardadas con `--capturas`: aciertos y señal por pieza negra/blanca y casilla oscura/clara, comparando variantes del filtro (3.7) | en uso |
 | `selfplay_td.py` | **v1**: autojuego con TD-Leaf(λ), búsqueda sin quiescencia (corrida `desde_cero`) | histórico, para comparar |
 | `agent.py` | **v1**: `NetSearcher` / `NetPlayer` (búsqueda sin capturas) | histórico |
 | `dataset_lichess.py` | PGN → dataset (posición, resultado) para supervisado | para Valentino |
@@ -293,6 +294,40 @@ La demora desde que sale la mano pasa de ≈ 0,3 s a ≈ 0,4 s. **Punto débil d
 que se mueven hay 2 avisos de "no estoy seguro" que el original no tenía (probablemente porque el promedio de 8
 cuadros mezcla franjas en otra posición que la de la referencia); son avisos, no jugadas equivocadas, y se
 resuelven con un clic. No se probó con una webcam real (el entorno donde se hizo no tiene cámara).
+
+**Detección manual por ráfaga (20/11, por defecto).** Ya no se detecta sola al quedar quieta la imagen: después
+de jugar se pulsa «Detectar jugada» o la barra espaciadora. `BoardVision.iniciar_rafaga(15)` junta 15 cuadros
+quietos (con 3 de margen después del último movimiento; si hay movimiento vuelve a empezar), los combina con la
+**mediana por píxel** y evalúa una vez; esa mediana también queda como referencia siguiente. Si no ve cambios
+avisa "No veo cambios" y **no** refresca la referencia (antes la refrescaba en silencio y una jugada que cambió
+poco se perdía). Si en ≈ 5 s no hay quietud, avisa. `--auto` vuelve al comportamiento anterior. Los cambios por
+casilla se calculan solo en la ráfaga (o en cada cuadro si se mira la vista "Rectificada + cambios").
+Probado con la webcam real (`--cam 1`, 19/11): funciona; con `calib.json` viejo hubo dudas entre e4 y h4
+(conviene recalibrar al cambiar de cámara o de posición).
+
+**Piezas negras (20/11).** Filtros opcionales en `BoardVision` (apagados por defecto): `gamma_sombras` (gamma
+< 1 antes del CLAHE), `peso_textura` (diferencia del desvío local del brillo en 5×5), `peso_grad` y
+`refuerzo_oscuras`. `--filtro-negras` activa `FILTRO_NEGRAS` (gamma 0,6 y textura 0,5, **provisorio**).
+Para elegir con datos reales: `chesscam.py --capturas` guarda cada detección (referencia, imagen, posición y la
+jugada que terminó aplicándose, detectada o cargada a mano; al deshacer se renombra `_deshecha`) en
+`chesscam/capturas/<fecha>/` (no se sube), y `python chesscam/diagnostico_negras.py chesscam/capturas
+[--imagenes DIR]` compara variantes: aciertos, margen y señal (z) de las casillas de la jugada por grupo (pieza
+negra o blanca × casilla oscura o clara) y por canal. Solo usa la pista de cambio (no la de casilla vacía).
+
+Prueba simulada con la detección manual (semilla 0; las filas de (e) y "todos" en manual no terminaron):
+
+| Escenario | Automática: bien | Manual: bien | Manual + `--filtro-negras`: bien |
+|---|---|---|---|
+| Sin problemas, ±3 %, (a) exposición, (c) corrimiento | 23/23 | 23/23 | 23/23 |
+| (b) Franjas 50 Hz | 21/23 | 22/23 | **23/23** |
+| Todos juntos | 21/23 | 21/23 | 21/23 |
+| (e) Negras con poco contraste | 23/23 | sin terminar | 23/23 |
+
+Ninguna jugada equivocada ni inventada en los 10 s quieto (en manual se pulsa una vez sin jugar). La demora
+desde que sale la mano pasa a ≈ 0,53 s. El escenario (e) resultó demasiado fácil (lo detecta hasta la
+automática): todavía no muestra si el filtro ayuda; hace falta uno más difícil o las capturas reales.
+`prueba_robustez.py` acepta `--auto`, `--filtro PARAM=VALOR ...`, `--solo TEXTO` y `--capturas DIR`, y genera el
+ruido con OpenCV en float32 (≈ 1,5 min por escenario en vez de 10).
 
 ## 4. Resultados hasta ahora (20 partidas por punto)
 
@@ -607,9 +642,11 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
    `leer_tablero()` / `detectar_jugada()`; cara y voz `mostrar(emocion, texto)`. Cámara a 45 a 50 cm, ≈ 52°.
 9. ~~ChessCam: el detector de movimiento compara el brillo absoluto entre cuadros~~ **Resuelto el 19/11** en la
    rama `vision-robusta` (sección 3.7): movimiento normalizado, promedio de cuadros, espera inicial,
-   diferencia tolerante a corrimientos y `--fijar-camara`. Falta: revisar y fusionar la rama, probarla con la
-   webcam real (vista "Rectificada + cambios": 1 minuto sin jugar, pasar la mano sin tocar nada, 5 jugadas) y
-   mirar los 2 avisos con franjas de luz que se mueven.
+   diferencia tolerante a corrimientos y `--fijar-camara`. El 20/11 se sumó la detección manual por ráfaga
+   (botón o espacio) y los filtros para piezas negras; con la webcam real (`--cam 1`) funciona. Falta: fusionar
+   la rama; jugar 15 a 20 jugadas con `--capturas` (muchas de negras en casillas oscuras) y elegir el filtro con
+   `diagnostico_negras.py`; terminar las filas pendientes de `prueba_robustez.py` y hacer un escenario de
+   negras más difícil que (e).
 10. Informe (marco teórico: MDP, valor, TD(λ), TD-Leaf, TreeStrap, búsqueda minimax, quiescencia y poda
    alfa-beta; caso de aplicación: el robot) y presentación del 26/11. Relato (4.4): (1) desde cero el RL aprende
    a evaluar casi como el material; (2) desde el material suma +36 Elo y predice mejor quién gana; (3) seguir

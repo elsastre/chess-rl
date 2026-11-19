@@ -10,6 +10,13 @@ Uso (desde la carpeta del repo):
     python chesscam/chesscam.py --ck runs/final/ck_150000.pt --sin-camara # solo el simulador, sin tablero fisico
     python chesscam/chesscam.py --cam 1 --fijar-camara                    # fija exposición, foco y balance
     python chesscam/chesscam.py --cam 1 --vision-original                 # el detector de antes del 19/11
+    python chesscam/chesscam.py --cam 1 --auto                            # detecta sola al quedar quieta
+    python chesscam/chesscam.py --cam 1 --capturas                        # guarda cada detección (diagnóstico)
+    python chesscam/chesscam.py --cam 1 --filtro-negras                   # filtro para piezas negras
+
+Detección manual (20/11, por defecto): después de jugar se pulsa «Detectar jugada» (o la barra espaciadora).
+Se juntan 15 cuadros quietos, se combinan con la mediana por píxel y se busca la jugada una sola vez. Una mano
+que pasa o la cámara reajustándose ya no disparan nada. Con --auto vuelve el comportamiento anterior.
 
 Robustez (19/11): la referencia y la imagen que se compara son el promedio de 8 cuadros quietos, se esperan
 2 s antes de la primera referencia, el detector de movimiento ignora el brillo general y la diferencia
@@ -28,8 +35,8 @@ Flujo:
      exteriores de las casillas, en este orden: a1, h1, h8, a8
      (a1 = esquina izquierda del lado de las blancas).
      La calibración se guarda en calib.json y se reutiliza.
-  3. Juega. Tras cada jugada, cuando retiras la mano y la imagen se queda
-     quieta, se deduce la jugada legal que explica los cambios.
+  3. Juega. Tras cada jugada, retira la mano y pulsa «Detectar jugada» (o espacio): con la imagen
+     quieta se deduce la jugada legal que explica los cambios (con --auto, sin pulsar nada).
   4. Si algo falla: haz clic en el tablero de la pantalla (origen → destino)
      para meter la jugada a mano, o usa Deshacer / Sincronizar.
 """
@@ -50,7 +57,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 
-from board_vision import BoardVision, pick_move, normalize_scores, WARP, SQ, VISION_ORIGINAL
+from board_vision import BoardVision, pick_move, normalize_scores, WARP, SQ, VISION_ORIGINAL, FILTRO_NEGRAS
 from partida import Partida, Bot, san_es
 
 CALIB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calib.json")
@@ -358,8 +365,20 @@ class CalibrationWindow:
 
 
 class App:
-    def __init__(self, root, cap, board_px, reopen=None, partida=None, vision_kwargs=None):
+    def __init__(self, root, cap, board_px, reopen=None, partida=None, vision_kwargs=None,
+                 manual=True, rafaga=15, capturas=None):
+        """manual: la jugada se detecta solo al pulsar «Detectar jugada» (o la barra espaciadora), con la
+        mediana de una ráfaga de `rafaga` cuadros quietos; con manual=False, sola al quedar quieta la imagen.
+        capturas: carpeta donde guardar cada detección (imágenes, posición y jugada real) para
+        diagnostico_negras.py; None = no guardar."""
         self.root = root
+        self.manual = manual
+        self.n_rafaga = rafaga
+        self.rafaga_desde = None       # cuadro en que se pidió la ráfaga (para el tiempo máximo)
+        self.capturas = capturas
+        self.captura_pendiente = None  # la última detección, hasta saber cuál fue la jugada real
+        self.ultima_captura = None     # archivo de la última captura guardada (se marca si se deshace)
+        self.n_capturas = 0
         self.partida = partida or Partida(con_camara=cap is not None)
         board_px = min(board_px, int(root.winfo_screenheight() * 0.82))
         self.board_px = board_px
@@ -445,7 +464,8 @@ class App:
 
         btns = tk.Frame(side, bg="#2b2b2b")
         btns.pack(fill="x", pady=4)
-        for i, (txt, cmd) in enumerate([
+        botones = [("Detectar jugada", self.detectar)] if (self.cap is not None and self.manual) else []
+        for i, (txt, cmd) in enumerate(botones + [
             ("Calibrar", self.start_calibration),
             ("Sincronizar", self.sync_now),
             ("Deshacer", self.undo),
@@ -455,8 +475,11 @@ class App:
             ("Pista", self.hint),
             ("Bot: hecha", self.bot_move_done),
         ]):
-            ttk.Button(btns, text=txt, command=cmd).grid(row=i // 3, column=i % 3,
-                                                         sticky="ew", padx=2, pady=2)
+            # takefocus=0: así la barra espaciadora no "pulsa" además el último botón usado
+            ttk.Button(btns, text=txt, command=cmd, takefocus=0).grid(row=i // 3, column=i % 3,
+                                                                      sticky="ew", padx=2, pady=2)
+        if self.cap is not None and self.manual:
+            self.root.bind("<space>", lambda e: self.detectar())
         for c in range(3):
             btns.columnconfigure(c, weight=1)
         for w in btns.grid_slaves():                # sin camara no hay nada que calibrar ni sincronizar
@@ -702,11 +725,13 @@ class App:
     def apply_move(self, mv, manual=False, conf=None):
         """Toda jugada (camara o clic) pasa por la partida, que controla los turnos del bot.
         Devuelve True si se aplico."""
+        fen_antes = self.board.fen()
         ok, msg = self.partida.jugada(mv)
         if not ok:
             self.draw_board()
             self.set_status(msg, "#f38ba8")
             return False
+        self.guardar_captura(fen_antes, mv, "manual" if manual else "detectada")
         if self.warped is not None and self.cap is not None:
             self.set_ref(self.warped)
         how = "manual" if manual else f"detectada, confianza {conf:.2f}"
@@ -731,7 +756,8 @@ class App:
             self.set_status(f"El bot falló: {type(dato).__name__}: {dato}", "#f38ba8")
         elif tipo == "bot":
             if self.partida.con_camara:
-                self.set_status("Hacé en el tablero la jugada de la flecha verde.", "#f9e2af")
+                self.set_status("Hacé en el tablero la jugada de la flecha verde"
+                                + (" y pulsá «Detectar jugada» (o espacio)." if self.manual else "."), "#f9e2af")
             else:
                 self.set_status("Tu turno.", "#a6e3a1")
             self.cartel = True
@@ -759,6 +785,7 @@ class App:
         if not self.board.move_stack and self.partida.pendiente is None:
             return
         self.partida.deshacer()
+        self.marcar_captura_deshecha()
         self.selected = None
         self.cartel = True
         self.draw_board()
@@ -880,7 +907,8 @@ class App:
             self.root.after(30, self.loop)
 
     def process(self, frame):
-        warped, event = self.vision.update(frame)
+        # los cambios por casilla se calculan en cada cuadro solo si se están mostrando
+        warped, event = self.vision.update(frame, puntajes=self.ver_cambios())
         self.warped = warped
         if self.vision.reference is None:
             if self.vision.listo_para_referencia():          # quieta (y, con la visión nueva, ~2 s después de arrancar)
@@ -888,15 +916,77 @@ class App:
                 self.sync_pending = False
                 self.set_status("Listo. Juegan las blancas.")
             return
-        if event == "moving":
-            self.status.configure(text="Movimiento…", fg="#888")
-        elif event == "settled":
+        if event == "rafaga":                      # se juntaron los cuadros quietos pedidos con «Detectar jugada»
+            self.rafaga_desde = None
             if self.sync_pending:
                 self.set_ref(warped)
                 self.sync_pending = False
                 self.set_status("Sincronizado con el tablero.")
                 return
             self.detect_move()
+            return
+        if self.vision.en_rafaga and self.rafaga_desde is not None \
+                and self.vision.cuadros - self.rafaga_desde > self.MAX_CUADROS_RAFAGA:
+            self.vision.cancelar_rafaga()
+            self.rafaga_desde = None
+            self.set_status("La imagen no se quedó quieta. Retirá la mano y volvé a pulsar «Detectar jugada».",
+                            "#f38ba8")
+            return
+        if event == "moving":
+            if not self.vision.en_rafaga:
+                self.status.configure(text="Movimiento…", fg="#888")
+        elif event == "settled":
+            if self.sync_pending:
+                self.set_ref(warped)
+                self.sync_pending = False
+                self.set_status("Sincronizado con el tablero.")
+                return
+            if not self.manual:
+                self.detect_move()
+            elif not self.vision.en_rafaga:
+                self.set_status("Cuando termines la jugada, pulsá «Detectar jugada» (o espacio).", "#9fd3ff")
+
+    MAX_CUADROS_RAFAGA = 150           # ~5 s: si en ese tiempo no hay `rafaga` cuadros quietos, se avisa
+
+    def ver_cambios(self):
+        return self.view_mode.get() == "warped"
+
+    def detectar(self):
+        """Botón «Detectar jugada»: junta una ráfaga de cuadros quietos y, al completarla, busca la jugada."""
+        if self.cap is None or not self.vision.calibrated or self.calib_win is not None:
+            return
+        if self.vision.reference is None:
+            self.set_status("Todavía no hay referencia: esperá a que la imagen quede quieta.", "#f9e2af")
+            return
+        if self.partida.pensando:
+            self.set_status("Esperá la jugada del bot.", "#f9e2af")
+            return
+        if self.vision.en_rafaga:
+            return
+        self.vision.iniciar_rafaga(self.n_rafaga)
+        self.rafaga_desde = self.vision.cuadros
+        self.set_status("Mirando el tablero… no muevas nada.", "#888")
+
+    # ------------------------------------------------- capturas para diagnóstico
+    def guardar_captura(self, fen_antes, mv, fuente):
+        """Si --capturas está activo y la última detección era de esta posición, la guarda con la jugada real
+        (la que terminó aplicándose: detectada o cargada a mano)."""
+        cap, self.captura_pendiente = self.captura_pendiente, None
+        if not self.capturas or cap is None or cap["fen"] != fen_antes:
+            return
+        os.makedirs(self.capturas, exist_ok=True)
+        self.n_capturas += 1
+        ruta = os.path.join(self.capturas, f"{self.n_capturas:03d}_{mv.uci()}.npz")
+        np.savez_compressed(ruta, ref=cap["ref"], img=cap["img"], fen=fen_antes, jugada=mv.uci(),
+                            fuente=fuente, detectada=cap["detectada"])
+        self.ultima_captura = ruta
+        print(f"[captura] {ruta} ({fuente})", flush=True)
+
+    def marcar_captura_deshecha(self):
+        """Si se deshace la jugada de la última captura, su 'jugada real' no es confiable: se renombra."""
+        if self.ultima_captura and os.path.exists(self.ultima_captura):
+            os.replace(self.ultima_captura, self.ultima_captura[:-4] + "_deshecha.npz")
+        self.ultima_captura = None
 
     def detect_move(self):
         if self.partida.pensando:                  # el bot todavia no dijo su jugada: sin tocar la referencia,
@@ -904,10 +994,12 @@ class App:
             return
         raw = self.vision.last_scores
         z = normalize_scores(raw)
-        if z.max() < 1.5:
+        if z.max() < 1.5 and not self.manual:
             # nada relevante cambió (p. ej. una mano que pasó): refresca referencia
             self.set_ref(self.warped)
             return
+        # con el botón la persona dice que jugó: se busca igual (pick_move exige un mínimo) y la referencia NO
+        # se refresca, para no perder una jugada que cambió poco (pieza negra sobre casilla oscura)
         if self.board.is_game_over():
             return
         ed = None
@@ -917,6 +1009,14 @@ class App:
                                      self.vision.empty_valid, empty_mask(self.board))
         print("[jugada] " + ", ".join(f"{self.board.san(m)}={sc:.1f}"
                                       for sc, m in ranked[:4]), flush=True)
+        if self.capturas and self.vision.reference_img is not None:
+            self.captura_pendiente = {"ref": self.vision.reference_img,
+                                      "img": self.vision.imagen_estable(self.warped).copy(),
+                                      "fen": self.board.fen(), "detectada": mv.uci() if mv else ""}
+        if mv is None and z.max() < 1.5:
+            self.set_status("No veo cambios en el tablero. Si ya jugaste, ajustá la pieza y volvé a pulsar, "
+                            "o marcá la jugada en la pantalla.", "#f38ba8")
+            return
         if mv is not None:
             if not self.apply_move(mv, conf=conf):
                 pass            # no era la jugada esperada: la referencia NO se actualiza (se corrige y se reevalua)
@@ -995,10 +1095,28 @@ def main():
                     help="exposición fija (con DirectShow suele ser una potencia de 2 negativa: -5, -6, -7...)")
     ap.add_argument("--vision-original", action="store_true",
                     help="el detector de antes del 19/11 (sin promedio, sin espera, sin tolerancias), para comparar")
+    ap.add_argument("--auto", action="store_true",
+                    help="detecta la jugada sola al quedar quieta la imagen (sin el botón «Detectar jugada»)")
+    ap.add_argument("--rafaga", type=int, default=15,
+                    help="cuadros quietos que se combinan (mediana) al pulsar «Detectar jugada»")
+    ap.add_argument("--capturas", nargs="?", const="", default=None, metavar="CARPETA",
+                    help="guarda cada detección con la jugada real para chesscam/diagnostico_negras.py "
+                         "(por defecto en chesscam/capturas/<fecha>)")
+    ap.add_argument("--filtro-negras", action="store_true",
+                    help="activa el filtro para piezas negras (gamma en las sombras y textura local)")
     args = ap.parse_args()
     vision_kwargs = dict(VISION_ORIGINAL) if args.vision_original else {}
     if args.vision_original:
         print("[visión] detector original (sin promedio, sin espera inicial, sin tolerancias)", flush=True)
+    if args.filtro_negras:
+        vision_kwargs.update(FILTRO_NEGRAS)
+        print(f"[visión] filtro para piezas negras: {FILTRO_NEGRAS}", flush=True)
+    capturas = args.capturas
+    if capturas == "":
+        capturas = os.path.join(os.path.dirname(os.path.abspath(__file__)), "capturas",
+                                time.strftime("%Y%m%d-%H%M%S"))
+    if capturas:
+        print(f"[capturas] se guardan en {capturas}", flush=True)
 
     cap = None
     if not args.sin_camara:
@@ -1018,6 +1136,7 @@ def main():
 
     root = tk.Tk()
     app = App(root, cap, args.board, partida=partida, vision_kwargs=vision_kwargs,
+              manual=not args.auto, rafaga=args.rafaga, capturas=capturas,
               reopen=lambda: open_camera(args.cam, args.backend, args.width,
                                          args.height, args.mjpg, args.fijar_camara, args.exposicion))
     # Permite cerrar con Ctrl+C desde la terminal

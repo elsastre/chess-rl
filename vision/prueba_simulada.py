@@ -11,6 +11,9 @@ S, L = dj.S, dj.LADO
 CAM = [[300, 650], [980, 650], [850, 180], [430, 180]]       # a1, h1, h8, a8 en la imagen de la camara (vista inclinada)
 W, H = 1280, 720
 calib = dj.Calibracion(CAM); calib.fijar_cercania(W, H)
+# (relleno, borde) en BGR de las piezas blancas y negras; chesscam/prueba_robustez.py baja el contraste de las negras
+COLOR_BLANCAS = ((235, 235, 230), (40, 40, 40))
+COLOR_NEGRAS = ((35, 30, 30), (200, 200, 200))
 
 def render(board, mano=None):
     top = np.zeros((L, L, 3), np.uint8)
@@ -31,7 +34,7 @@ def render(board, mano=None):
         bx, by = (f + .5 + .3 * cx_) * S, (7 - r + .5 + .3 * cy_) * S
         alto = {1: .9, 2: 1.1, 3: 1.2, 4: 1.0, 5: 1.4, 6: 1.6}[p.piece_type] * S
         centro = (int(bx - cx_ * alto / 2), int(by - cy_ * alto / 2))
-        c, borde = ((235, 235, 230), (40, 40, 40)) if p.color else ((35, 30, 30), (200, 200, 200))
+        c, borde = COLOR_BLANCAS if p.color else COLOR_NEGRAS
         cv2.ellipse(top, centro, (int(alto / 2), int(.3 * S)), ang, 0, 360, c, -1)
         cv2.ellipse(top, centro, (int(alto / 2), int(.3 * S)), ang, 0, 360, borde, 2)
     img = np.full((H, W, 3), 60, np.uint8)
