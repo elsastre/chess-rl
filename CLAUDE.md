@@ -1,11 +1,11 @@
 # CLAUDE.md: robot de ajedrez con aprendizaje por refuerzo
 
 Contexto completo del proyecto para trabajar desde cualquier máquina (Windows con NVIDIA o Mac con Apple Silicon).
-Leer entero antes de tocar código o lanzar corridas. Estado al 19/11/2026 (sección 4.4): el RL mejora al agente
-de forma significativa (+36 Elo sobre `ck_000000`), la continuación a profundidad 1 suma poco (+31) y se estanca,
-y la corrida con las mejoras (profundidad 2) da **+114 Elo** sobre 150k y **sigue mejorando**. Mejor red medida:
-`runs/mejoras/ck_180000.pt`. La corrida sigue: ya están 185k, 190k y 195k en la Mac (sin medir) y llega a 210k la
-noche del 19/11. Qué falta y en qué orden: **pendiente 1** (sección 8).
+Leer entero antes de tocar código o lanzar corridas. Estado al 21/11/2026 (secciones 4.4 y 4.5): el RL mejora al
+agente de forma significativa (+36 Elo sobre `ck_000000`), la continuación a profundidad 1 suma poco (+31) y se
+estanca, y la corrida con las mejoras (profundidad 2) da **+114 Elo** sobre 150k. Mejor red medida:
+`runs/mejoras/ck_180000.pt`. **`runs/mejoras` terminó en 210.000** (21/11, laptop con GPU) sin colapso; 195k a 210k
+todavía sin medir. Qué falta y en qué orden: **pendiente 1** (sección 8).
 
 ---
 
@@ -86,7 +86,7 @@ Corridas en `runs/`:
 | `runs/treestrap_cero` | v2, TreeStrap puro desde red al azar, 20.000 partidas: **colapsó** |
 | `runs/final_sf` | Continuación de `final` con Stockfish como rival, 150.000 a 300.000 partidas, corrida en la Mac (M1, ≈ 19.000 partidas/h, 7,8 h). **Mejoró +31 Elo** en enfrentamiento directo contra 150k; contra Stockfish con 100 partidas no se veía (4.1 y 4.4) |
 | `runs/confirmar` | `ck_150000`, `ck_230000` y `ck_300000` de `final_sf` evaluados con 100 partidas por rival |
-| `runs/mejoras` | Corrida con las mejoras de 4.3, a profundidad 2 en la laptop con GPU: 150.000 a 180.000 (15 a 17/11), sigue hasta 195.000 (19/11) y 210.000 (noche del 19/11; pendiente 1). **La mejor**: +114 Elo contra 150k y +95 contra `final_sf` 300k, y la predicción sigue subiendo en cada checkpoint (4.4). **Checkpoint para el robot: `runs/mejoras/ck_180000.pt`** |
+| `runs/mejoras` | Corrida con las mejoras de 4.3, a profundidad 2 en la laptop con GPU: 150.000 a 180.000 (15 a 17/11), 195.000 (19/11) y **210.000 (terminada el 21/11, sección 4.5)**. **La mejor medida**: +114 Elo contra 150k y +95 contra `final_sf` 300k, y la predicción sigue subiendo en cada checkpoint (4.4). **Checkpoint para el robot: `runs/mejoras/ck_180000.pt`** |
 | `runs/mediciones` | Mediciones para atribuir al RL (4.4): `valor.csv`, `valor_calibracion.png`, `duelo_*.csv` y resúmenes, `resumen_atribucion.png` |
 | `runs/final` | **Bot final**: init `checkpoints/material.pt`, algo `mixto`, posiciones de Lichess, sin Stockfish, 7 procesos, 150.000 partidas (≈ 12,3 h en la RTX 4050). Fue el checkpoint del robot (`ck_150000.pt`) hasta el 18/11 |
 
@@ -514,6 +514,27 @@ Lectura:
 - Medir contra un tercero con 100 partidas no veía estas diferencias; el enfrentamiento directo pareado sí.
   Los IC de cada AUC por separado se superponen, pero la comparación es pareada: cuenta el IC de la diferencia.
 
+### 4.5 `runs/mejoras` hasta 210.000 (21/11, solo el log de entrenamiento)
+
+Terminó sin colapso. Resumen de `log.csv` por tramos de 15.000 partidas (≈ 25 % contra Stockfish, ≈ 15 % contra
+versiones viejas):
+
+| Tramo | Puntos vs Stockfish | Nivel medio | `|valor|` medio | Puntos vs viejos |
+|---|---|---|---|---|
+| 150k a 165k | 0,518 | 7,9 | 0,64 | 0,48 |
+| 165k a 180k | 0,498 | 8,3 | 0,67 | 0,44 |
+| 180k a 195k | 0,508 | 8,4 | 0,70 | 0,46 |
+| 195k a 210k | 0,504 | 8,3 | 0,71 | 0,44 |
+
+- El currículo oscila entre los niveles 8 y 9 desde ≈ 160k (con `--sf-azar`: nivel 8 = Skill 1 con 300 nodos,
+  nivel 9 = Skill 3 con 700 nodos, sin jugadas al azar). Ya le gana al viejo nivel 0 (≈ 1320), donde
+  `final_sf` sacaba 22 %.
+- Que el nivel no suba **no** dice que no mejore: el currículo mantiene el puntaje cerca de 0,5 a propósito, y
+  entre 160k y 180k el nivel también estaba casi quieto mientras la predicción subía (AUC 0,793 a 0,799, 4.4). Los puntos
+  contra viejos están sesgados hacia abajo por la exploración (4.2). **El log no alcanza para saber si 210k es
+  más fuerte que 180k: lo dice el enfrentamiento directo (pendiente 1).**
+- Pérdida estable en ≈ 0,05; la tasa estuvo fija en 1e-4 (el plan de `--lr-final` terminó en 180k).
+
 ## 5. Decisiones de diseño (y por qué)
 
 | Decisión | Motivo |
@@ -638,23 +659,27 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 
 ## 8. Pendientes (prioridad aproximada)
 
-1. **Terminar `runs/mejoras` y medirla** (la predicción sigue subiendo en cada checkpoint). Plan acordado el 19/11:
+1. **Medir `runs/mejoras` hasta 210k** (la corrida terminó el 21/11, sección 4.5; falta la medición). Plan del
+   19/11, con el estado al 21/11 (todo se corrió un día):
    - **19/11 (Mac):** 185k, 190k y 195k ya están en `runs/mejoras/` de la Mac. Correr `bash lanzar_mediciones.sh`
      (≈ 2,5 h): predicción de 160k a 195k, y enfrentamientos de 195k contra **180k** (¿sigue aprendiendo?), contra
      150k y contra 300k. El lanzador elige solo el último checkpoint de `runs/mejoras/` y, desde el 19/11,
      también lo enfrenta contra `mej_180k` (para la predicción toma cada 10.000, y cada 5.000 desde 180.000).
      Subir el lanzador con los resultados.
-   - **Noche del 19/11 (laptop con GPU):** la receta b de la sección 7 con `--init runs\mejoras\ck_195000.pt
-     --resume` y `--games 15000`: llega a 210.000. Al reanudar conserva el nivel de Stockfish (iba en 8 a 9). La
-     tasa sigue en 1e-4 constante: el plan de `--lr-final` (5e-4 a 1e-4 en 30.000 partidas, desde 150k) ya
-     terminó, y para afinar está bien; para un plan nuevo, cambiar `--lr`.
-   - **20/11 (Mac):** pasar a `runs/mejoras/` de la Mac al menos `ck_200000.pt`, `ck_205000.pt` y `ck_210000.pt`
+   - ~~**Noche del 19/11 (laptop con GPU):** reanudar desde `ck_195000` con `--games 15000`~~ **Hecho** (noche
+     del 20 al 21/11, ≈ 9,9 h a ≈ 1.517 partidas/h): `ck_196000` a `ck_210000` en `runs\mejoras\` de la laptop.
+     Arrancó en nivel 9 de Stockfish y tasa 1e-4, como se esperaba. Ojo en Windows: con `| Tee-Object` Python
+     imprime de a bloques (parece trabado); usar `python -u` o mirar `log.csv` con `Get-Content -Tail 3 -Wait`.
+     Y correrlo en PowerShell, no en cmd (`Tee-Object` y `Activate.ps1` no existen en cmd).
+   - **Ahora (Mac):** pasar a `runs/mejoras/` de la Mac al menos `ck_200000.pt`, `ck_205000.pt` y `ck_210000.pt`
      y relanzar `bash lanzar_mediciones.sh`: suma 210k a la predicción y lo enfrenta contra 180k, 150k y 300k
-     (lo ya hecho se saltea).
-   - **22/11: cierre de experimentos.** Si 210k sigue mejorando y queda una noche antes, se puede estirar; si
-     no, elegir el mejor checkpoint medido para el robot (pendiente 2).
-2. **Usar `runs/mejoras/ck_180000.pt` (o el último medido) en el robot**, `interfaz.py` y ChessCam, con
-   `--depth 2` (es la búsqueda con la que entrenó).
+     (lo ya hecho se saltea; si la medición de 195k no se hizo, la hace también).
+   - **Cierre de experimentos (22/11):** **no seguir entrenando** (la entrega es el 26/11). Si 210k le gana a 180k
+     con un IC que no cruza 0,5, el robot pasa a 210k; si no, queda en 180k (pendiente 2).
+2. **Usar el mejor checkpoint medido en el robot**, `interfaz.py` y ChessCam, con `--depth 2` (es la búsqueda con
+   la que entrenó). Hoy es `runs/mejoras/ck_180000.pt`. Para **probar la pantalla** se le pasó a electrónica
+   `ck_210000.pt` (21/11): todos los checkpoints tienen el mismo formato, así que si se elige otro solo se
+   cambia el archivo.
 3. **Elo absoluto del mejor checkpoint** (opcional, para la presentación): `evaluar.py` con `--depth 2 --q 4
    --poda --stockfish ... --sf-nodes 20000` y 100 a 200 partidas sobre `ck_180000` y `ck_150000` en una carpeta
    aparte. El ≈ 1240 actual es de 150k con Stockfish por tiempo.
