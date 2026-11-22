@@ -74,7 +74,7 @@ def main():
         print("no hay mediciones en", args.dir); return
 
     if duelos and filas:
-        fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5.2), gridspec_kw={"width_ratios": [1, 1.3]})
+        fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, max(5.2, 1.6 + 0.55 * len(duelos))), gridspec_kw={"width_ratios": [1, 1.3]})
     else:                                   # solo una de las dos mediciones: un panel
         fig, ax = plt.subplots(figsize=(7.5, 4.6))
         a1, a2 = (ax, plt.figure().add_subplot()) if duelos else (plt.figure().add_subplot(), ax)
