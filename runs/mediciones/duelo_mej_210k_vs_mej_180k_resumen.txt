@@ -1,0 +1,4 @@
+mej_210k contra mej_180k: 500 pares (1000 partidas)
+  puntaje de mej_210k: 0.532  IC 95 % [0.514, 0.551]  -> diferencia SIGNIFICATIVA
+  Elo de mej_210k respecto de mej_180k: +23  [+9, +36]
+  partidas: 226 victorias, 613 tablas, 161 derrotas de mej_210k
