@@ -1,0 +1,767 @@
+% =====================================================================
+%  Informe final: Robot de ajedrez con aprendizaje por refuerzo
+%  Machine Learning, Ingeniería en IA y Ciencia de Datos, UCU (2026)
+%  Compilar en Overleaf con pdfLaTeX. La carpeta figuras/ tiene que tener:
+%  desde_cero_auc.jpeg, resumen_atribucion.png (la nueva, con 210k),
+%  valores_piezas.png, mapa_lichess_1.png, valor_calibracion.jpeg y,
+%  si la suben, una foto del montaje: montaje.jpg (es opcional: si no
+%  está, el informe compila igual sin esa figura).
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{icomma}            % permite escribir 0,5 en modo matemático
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage[round,authoryear]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink,spanish]{cleveref}
+
+\captionsetup{font=small,labelfont=bf}
+\setlist{itemsep=1pt,topsep=3pt}
+\setlength{\parskip}{3pt}
+\graphicspath{{figuras/}}
+
+\newcommand{\vhat}{\hat v_\theta}
+
+% ---------------------------------------------------------------------
+\begin{document}
+
+% =========================== PORTADA ==================================
+\begin{titlepage}
+\centering
+{\large Universidad Católica del Uruguay\par}
+{\large Facultad de Ingeniería y Tecnologías\par}
+\vspace{0.4cm}
+{Ingeniería en Inteligencia Artificial y Ciencia de Datos\par}
+{Machine Learning: trabajo final\par}
+\vspace{2.5cm}
+{\LARGE\bfseries Un robot que aprende a jugar al ajedrez\par}
+\vspace{0.3cm}
+{\Large Aprendizaje por refuerzo con TD-Leaf($\lambda$) y TreeStrap\par}
+\vspace{2.5cm}
+{\large\textbf{Integrantes}\par}
+\vspace{0.2cm}
+Sebastián Bascou Mortola\par
+Mónica Aylín Deus Álvarez\par
+Valentino Repetto Perez\par
+Braihans Matihas Sastre Moreira\par
+\vspace{1.5cm}
+{\large\textbf{Docente:} \textit{Gustavo Vasquez y Juan Sebastián Parolli}\par}
+\vfill
+\begin{minipage}{0.9\textwidth}
+\small
+\textbf{Resumen.} Construimos un agente que aprende a jugar al ajedrez
+jugando, con aprendizaje por refuerzo (RL) en una laptop, y lo pusimos
+dentro de un robot que mira un tablero real con una cámara y muestra en una
+pantalla sus jugadas y una cara que expresa cuán confiado está. El agente
+combina una red neuronal que evalúa posiciones con una búsqueda de pocas
+jugadas. Para demostrar que la mejora viene del aprendizaje comparamos
+redes con todo lo demás fijo. Desde una red que solo conocía el valor de
+las piezas, el RL suma +36 puntos de Elo; al estancarse, diagnosticamos la
+causa, la corregimos y la red llegó a +148 Elo antes de volver a
+estancarse. Un análisis de explicabilidad muestra qué aprendió: por
+ejemplo, que un peón a un paso de coronar vale mucho más que uno en su
+casilla inicial, algo que nadie le enseñó.
+\end{minipage}
+\vspace{1cm}
+
+{\large 26 de noviembre de 2026\par}
+\end{titlepage}
+
+\setcounter{page}{1}
+
+% =========================== 1. INTRODUCCIÓN ===========================
+\section{Introducción}
+
+El ajedrez fue el problema de referencia de la inteligencia artificial
+desde \citet{shannon1950}, y el aprendizaje por refuerzo mostró que una
+máquina puede aprender a evaluar posiciones solo jugando: TD-Gammon en el
+backgammon \citep{tesauro1995}, KnightCap \citep{baxter2000} y Giraffe
+\citep{lai2015} en el ajedrez y, con un cómputo inalcanzable para nosotros,
+AlphaZero \citep{silver2018}. Este trabajo se hace dos preguntas: qué se
+puede lograr con RL y \emph{una laptop}, y cómo demostrar honestamente que
+la mejora se debe al aprendizaje y no a otra cosa.
+
+El caso de aplicación es un robot que juega contra una persona en un tablero
+real: ve las jugadas con una cámara, muestra las suyas en una pantalla y
+expresa emociones. Esas emociones no son decorativas: la \emph{confianza}
+es el valor que la red le da a la posición y la \emph{sorpresa} es la misma
+señal de error con la que aprende. El objetivo de fuerza era de unos 1000
+puntos de Elo.
+
+Los aportes del trabajo son:
+\begin{enumerate}
+\item Un sistema de RL completo que entrena en horas en una laptop.
+\item Una forma de medir que atribuye la mejora al RL, con intervalos de
+  confianza.
+\item El diagnóstico de por qué el aprendizaje se estancó y una corrección
+  que funcionó (+148 Elo).
+\item Un análisis de explicabilidad que muestra qué conocimiento de ajedrez
+  agregó el RL.
+\item La integración en un robot con cámara, pantalla, reloj de ajedrez y
+  emociones que salen del propio RL.
+\end{enumerate}
+
+% =========================== 2. MARCO TEÓRICO ===========================
+\section{Marco teórico}
+
+\subsection{El ajedrez como problema de RL}
+
+En RL un agente aprende a decidir a partir de recompensas. En el ajedrez,
+la única recompensa llega al final: $z=+1$ si gana, $0$ si empata y $-1$ si
+pierde. Formalmente es un proceso de decisión de Markov
+\citep{sutton2018}: el estado $s$ es la posición y las acciones son las
+jugadas legales. Lo que queremos aprender es el \emph{valor} de cada
+posición, es decir, qué resultado se espera desde ahí. Lo aproximamos con una
+red $\vhat(s)\in[-1,1]$, siempre desde el punto de vista del bando que
+mueve, y la leemos como una chance de ganar $p=(\vhat+1)/2$.
+
+\subsection{Aprender de la jugada siguiente: TD($\lambda$)}
+
+Esperar al final de la partida para corregir cada evaluación es lento. La
+idea de las diferencias temporales \citep{sutton1988} es corregir cada
+predicción con la siguiente: si en la jugada $t$ la red decía $w_t$ y en la
+$t+1$ dice $w_{t+1}$, la diferencia $\delta_t=w_{t+1}-w_t$ es una
+``sorpresa'' que indica cuánto se equivocó. TD($\lambda$) mezcla todos los
+horizontes, desde la jugada siguiente hasta el resultado final:
+\begin{equation}
+G_t^\lambda = (1-\lambda)\,w_{t+1} + \lambda\,G_{t+1}^\lambda,
+\qquad G_T^\lambda = z,
+\label{eq:lambda}
+\end{equation}
+y mueve los pesos hacia ese objetivo:
+$\theta \leftarrow \theta + \alpha\,(G_t^\lambda - \vhat(s_t))\,\nabla_\theta \vhat(s_t)$.
+Con $\lambda=0$ cada posición aprende solo de la siguiente; con
+$\lambda=1$, solo del resultado. Lo importante es que $z$ es un \emph{ancla
+externa}: información sobre quién ganó que no sale de la propia red.
+
+\subsection{Mirar hacia adelante: búsqueda}
+
+Una red sola juega mal, porque no ve las consecuencias concretas de una
+jugada. Por eso el agente \emph{busca}: prueba sus jugadas, las respuestas
+del rival, y se queda con la que mejor resultado garantiza (negamax):
+\begin{equation}
+v_d(s)=\max_{a}\, -v_{d-1}(s_a), \qquad v_0(s)=\vhat(s),
+\end{equation}
+donde $d$ es la profundidad y $s_a$ la posición tras la jugada $a$. La poda
+alfa-beta \citep{knuth1975} da el mismo resultado sin mirar ramas que no
+pueden cambiar la decisión. Para no cortar la búsqueda en medio de un
+cambio de piezas (el \emph{efecto horizonte}), en las hojas se siguen las
+capturas hasta llegar a una posición tranquila (búsqueda de
+\emph{quiescencia}).
+
+\subsection{Dos formas de aprender buscando}
+
+\textbf{TD-Leaf($\lambda$)} \citep{baxter2000} aplica TD($\lambda$) a un
+agente que busca: en vez de corregir la posición del tablero, corrige la
+posición del final de la variante que eligió la búsqueda, que es la que
+realmente evaluó la red.
+
+\textbf{TreeStrap} \citep{veness2009} usa la búsqueda como maestra: cada
+posición del árbol aprende el valor que le dio la búsqueda,
+\begin{equation}
+\mathcal{L}_{\text{TS}}(\theta)=\sum_{s\in\mathcal{T}}\big(v_d(s)-\vhat(s)\big)^2 .
+\end{equation}
+Aprovecha muchas posiciones por jugada, pero la red aprende de sí misma:
+si la red dice siempre 0, la búsqueda también dice 0 y no hay error. Sin un
+ancla externa puede caer en ese punto fijo, y lo observamos
+(\cref{sec:cero}). Por eso combinamos las dos señales: TreeStrap aporta
+cantidad y TD-Leaf aporta el ancla del resultado.
+
+\subsection{Cómo medimos}
+
+Si un jugador saca un puntaje medio $s$ (victoria 1, tablas 0,5) contra
+otro, la diferencia de Elo es $D=400\log_{10}\!\big(s/(1-s)\big)$
+\citep{elo1978}: +100 Elo equivale a sacar un 64\,\% de los puntos. Para la
+predicción del resultado usamos el \emph{AUC}: la probabilidad de que la red
+le dé más valor a una posición del bando que terminó ganando que a una del
+que terminó perdiendo (0,5 es azar y 1 es perfecto). El AUC no depende de la
+escala de la salida: si sube, la red ordena mejor las posiciones, no
+solo se volvió más segura.
+
+% =========================== 3. SISTEMA ================================
+\section{El sistema de aprendizaje}
+
+\paragraph{Qué ve la red.} La posición entra como 12 tableros de $8\times8$
+con unos y ceros, uno por tipo de pieza y color (``¿hay un caballo propio
+en esta casilla?''), siempre desde el bando que mueve. La red es una ResNet
+chica \citep{he2016} de unos 369.000 parámetros con salida $\tanh$. No ve el
+derecho a enrocar, la captura al paso ni las repeticiones (limitación
+conocida).
+
+\paragraph{Cómo busca.} A profundidad 1 o 2, con quiescencia en las hojas.
+Para que la profundidad 2 entrara en el tiempo disponible diseñamos una
+poda alfa-beta compatible con evaluar las posiciones en lote en la GPU:
+da el mismo resultado que el árbol completo evaluando unas 250 posiciones
+en vez de 1.070 (detalle en el \cref{anx:tecnico}). En las hojas también se
+detectan los mates en una jugada.
+
+\paragraph{Cómo aprende.} Cada partida arranca de una posición real de
+Lichess \citep{lichess} para tener variedad. El agente juega contra sí
+mismo (60\,\%), contra versiones viejas suyas (15\,\%, para no olvidar) y
+contra Stockfish \citep{stockfish} (25\,\%), con un currículo que sube o baja
+la dificultad según cómo le va \citep{bengio2009}. De cada partida salen
+muestras de TreeStrap y de TD-Leaf ($\lambda=0,7$) que se guardan en una
+memoria de repetición \citep{lin1992} y se usan para entrenar la red.
+Varios procesos juegan en paralelo en la CPU mientras otro entrena en la
+GPU; 150.000 partidas a profundidad 1 llevan unas 12 horas en una laptop con
+una RTX 4050. Los hiperparámetros están en el \cref{anx:hiper}.
+
+% =========================== 4. DISEÑO EXPERIMENTAL ====================
+\section{Diseño experimental}
+
+La pregunta central es de \emph{atribución}: ¿el agente juega mejor porque
+cambiaron los pesos aprendiendo de partidas? Para responderla, en cada
+comparación todo lo demás queda fijo: misma búsqueda, mismas posiciones,
+mismo rival. \Cref{tab:corridas} resume las corridas.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}l X r@{}}
+\toprule
+Corrida & Descripción & Partidas \\
+\midrule
+\texttt{desde\_cero} & TD-Leaf desde pesos al azar, profundidad 1 & 0 a 20.000 \\
+\texttt{treestrap\_cero} & TreeStrap solo, desde pesos al azar & 0 a 20.000 \\
+\texttt{final} & Desde una red que conoce el valor del material; objetivo mixto & 0 a 150.000 \\
+\texttt{final\_sf} & Continuación de \texttt{final} con Stockfish, profundidad 1 & 150.000 a 300.000 \\
+\texttt{mejoras} & Continuación de \texttt{final} con las correcciones de la \cref{sec:meseta}, profundidad 2 & 150.000 a 210.000 \\
+\bottomrule
+\end{tabularx}
+\caption{Corridas de entrenamiento. La red de material, punto de partida de
+\texttt{final}, se obtiene con una regresión supervisada del valor de las
+piezas, como en KnightCap y Giraffe; todo lo posterior es RL.}
+\label{tab:corridas}
+\end{table}
+
+Usamos tres instrumentos:
+\begin{enumerate}
+\item \textbf{Escalera de rivales fijos} (desde un jugador al azar hasta
+  Stockfish limitado a 1320 de Elo). Da un Elo absoluto, pero es poco
+  precisa: con 100 partidas el puntaje tiene un margen de $\pm0,1$.
+\item \textbf{Enfrentamiento directo} entre dos redes con la misma búsqueda:
+  500 posiciones de partida reales, cada una jugada dos veces con los colores
+  cambiados (1.000 partidas). Detecta diferencias de unos 30 Elo.
+\item \textbf{Predicción del resultado} en 47.484 posiciones de partidas de
+  Lichess de febrero de 2013, que ninguna red vio (el entrenamiento usó
+  enero). Medimos el AUC con intervalos por bootstrap
+  \citep{efron1993}.
+\end{enumerate}
+
+% =========================== 5. RESULTADOS =============================
+\section{Resultados}
+
+\subsection{Desde cero: el RL aprende a evaluar}
+\label{sec:cero}
+
+Con pesos al azar la red no sabe ni cuánto vale una pieza. Con TD-Leaf, en
+20.000 partidas contra sí misma pasa de sacar 0,05 a 0,85 contra un jugador
+que siempre come lo que más gana, y su AUC sube de 0,48 (azar) a 0,73, cerca
+de un predictor que solo cuenta material (0,775), algo que nunca se le
+enseñó (\cref{fig:cero}). TreeStrap solo, en cambio, colapsa: termina
+diciendo 50\,\% en cualquier posición (AUC 0,53). Es el punto fijo de la
+sección 2.4 visto en la práctica, y la razón del objetivo mixto.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.68\textwidth]{desde_cero_auc.jpeg}
+\caption{Mejora del AUC respecto de la red al azar (IC 95\,\%). En azul,
+TD-Leaf desde cero a 5.000, 10.000 y 20.000 partidas; en gris, el predictor
+de material y TreeStrap solo, que colapsó.}
+\label{fig:cero}
+\end{figure}
+
+\subsection{Desde el material: el RL suma fuerza}
+
+Como arrancar desde cero es lento, la corrida principal parte de la red de
+material y deja que el RL cambie la pregunta de ``cuánto material hay'' a
+``quién gana''. Tras 150.000 partidas, contra Stockfish 1320 saca 0,385 en
+300 partidas, es decir \textbf{unos 1240 de Elo [1200; 1280]}, por encima
+del objetivo de 1000 (la red sin RL rondaba los 1020). Con los instrumentos
+precisos la atribución es clara: en enfrentamiento directo le gana a la red
+sin RL por \textbf{+36 Elo [+26; +47]} y predice mejor quién gana
+(\cref{tab:atribucion}).
+
+\subsection{La meseta y su diagnóstico}
+\label{sec:meseta}
+
+Seguimos entrenando 150.000 partidas más (\texttt{final\_sf}) y la mejora
+fue chica: +31 Elo, con un AUC que quedó igual en 200.000, 250.000 y 300.000
+partidas. Revisando el código y los registros encontramos tres causas
+principales (el diagnóstico completo está en el \cref{anx:tecnico}):
+\begin{itemize}
+\item \textbf{Una maestra poco profunda.} A profundidad 1, la búsqueda que
+  le enseña a la red ve una sola jugada más que la red: ya no tenía nada
+  nuevo para enseñarle.
+\item \textbf{Ceguera a las amenazas.} El 73\,\% de las partidas contra
+  Stockfish terminaban con el agente recibiendo un mate que no veía.
+\item \textbf{Un rival sin escalones.} El nivel más fácil de Stockfish ya
+  era demasiado fuerte, así que el currículo nunca avanzó.
+\end{itemize}
+Las correcciones (corrida \texttt{mejoras}) fueron: entrenar a profundidad
+2, detectar mates, agregar niveles intermedios de Stockfish, explorar menos
+y ampliar la memoria de la red.
+
+\subsection{Las correcciones rompen la meseta}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Enfrentamiento directo (1.000 partidas) & Elo [IC 95\,\%] & AUC de la red nueva \\
+\midrule
+RL 150k contra sin RL & +36 [+26; +47] & 0,782 (sin RL: 0,767) \\
+Profundidad 1: 300k contra 150k & +31 [+20; +43] & 0,790 \\
+\texttt{mejoras}: 180k contra 150k & +114 [+100; +127] & 0,799 \\
+\texttt{mejoras}: 210k contra 180k & +23 [+9; +36] & 0,801 \\
+\textbf{\texttt{mejoras}: 210k contra 150k} & \textbf{+148 [+134; +163]} & \textbf{0,801} \\
+\bottomrule
+\end{tabular}
+\caption{Atribución al RL: en cada fila las dos redes usan la misma
+búsqueda, así que la diferencia está en los pesos. Todas las diferencias
+son significativas.}
+\label{tab:atribucion}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{resumen_atribucion.png}
+\caption{Izquierda: diferencia de Elo en enfrentamiento directo (IC 95\,\%).
+Derecha: mejora del AUC respecto de la red sin RL. Gris: sin RL; azul: tras
+el RL; naranja: continuación a profundidad 1; verde: corrida con las
+correcciones.}
+\label{fig:atribucion}
+\end{figure}
+
+Con las correcciones, 30.000 partidas valen \textbf{+114 Elo}, más que las
+150.000 de la continuación a profundidad 1 (\cref{tab:atribucion,fig:atribucion}).
+Seguimos hasta 210.000: la fuerza subió unos 25 Elo más hasta las 195.000 y
+después se estabilizó (las redes de 195k y 210k le sacan lo mismo a la de
+180k), y la predicción ya se había estabilizado en 180k. Por eso cerramos el
+entrenamiento en 210.000 partidas, que es la red que usa el robot:
+\textbf{+148 Elo} sobre la de 150k.
+
+Revisamos que no hubiera trampas en la medición: el color no influye,
+ninguna partida llegó al tope de jugadas y la red con las correcciones
+gana más partidas por mate. Y una lección: 100 partidas contra un rival
+fijo no detectaban diferencias de 30 a 40 Elo que el enfrentamiento directo
+sí detecta.
+
+\subsection{Qué aprendió la red: explicabilidad}
+\label{sec:xai}
+
+Las mediciones anteriores muestran \emph{que} el RL mejoró la red. Para ver
+\emph{qué} aprendió usamos \emph{oclusión} \citep{zeiler2014}: sacamos una
+pieza del tablero y medimos cuánto pierde su dueño según la red,
+\[
+\text{importancia}(x) = u(s) - u(s\setminus x),
+\]
+con $u$ el valor para el dueño de la pieza $x$, expresado en peones. La
+elegimos en lugar de métodos de gradientes (como Grad-CAM) porque la entrada
+es de unos y ceros: un gradiente responde qué pasaría con ``media pieza'',
+algo que no existe, mientras que sacar la pieza es una pregunta natural.
+Promediamos sobre 3.000 posiciones tranquilas de las partidas de febrero
+(sin sacar los reyes).
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Valor para la red (en peones) & Sin RL & RL 150k & \texttt{mejoras} 210k & Clásico \\
+\midrule
+Caballo / alfil & 1,6 / 1,7 & 1,4 / 1,6 & 2,3 / 2,7 & 3 / 3 \\
+Torre / dama & 3,0 / 5,3 & 2,8 / 6,4 & 4,6 / 9,0 & 5 / 9 \\
+Peón a un paso de coronar & 0,9 & 1,7 & 2,5 & -- \\
+\quad el mismo, en peones comunes de cada red & 1,5 & 3,4 & 3,4 & -- \\
+\bottomrule
+\end{tabular}
+\caption{Valor medio de cada pieza para la red, por oclusión, en 3.000
+posiciones no vistas. Todos los intervalos al 95\,\% son menores que
+$\pm0,1$, salvo los del peón a un paso de coronar (por ejemplo, 0,76 a
+0,96 sin RL y 1,5 a 3,4 en 210k).}
+\label{tab:xai}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{valores_piezas.png}
+\caption{Izquierda: valor de cada pieza para tres redes y los valores
+clásicos. Derecha: valor del peón según cuánto avanzó (IC 95\,\%).}
+\label{fig:xai_global}
+\end{figure}
+
+\Cref{tab:xai,fig:xai_global} muestran dos cosas. Primero, tras el RL los
+valores de las piezas se acercan a los clásicos (3, 3, 5 y 9). Una parte de
+eso es que la red se volvió más segura de sí misma en general, pero no es
+solo eso. Segundo, y más claro: \textbf{el RL aprendió que un peón avanzado
+vale mucho más}. Un peón a un paso de coronar vale 1,5 peones comunes para la
+red sin RL y 3,4 para la red con RL. La red sin RL partió del material, que
+cuenta igual a un peón en cualquier casilla: ese conocimiento solo pudo
+venir de jugar.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{mapa_lichess_1.png}
+\caption{Oclusión en una posición de Lichess: el número sobre cada pieza es
+cuánto pierde su dueño si se la saca; a la derecha, cuánto más la valora la
+red tras el RL. Para la red de 210k, el peón negro de d3, a dos pasos de
+coronar y apoyado por la dama, vale 12 peones (0,9 para la red sin RL), y
+por eso evalúa la posición a favor de las negras. Es un caso extremo,
+elegido entre 1.000 posiciones por ser de los que más cambian.}
+\label{fig:xai_mapa}
+\end{figure}
+
+Los mapas sobre el tablero (\cref{fig:xai_mapa}) explican decisiones
+concretas, y son los mismos que el robot muestra con su botón
+``¿Por qué?'' (\cref{sec:robot}). La oclusión tiene límites: mide cada
+pieza por separado y no sus combinaciones, y al sacar una pieza la posición
+puede quedar rara (una dama que de pronto queda atacada), así que los mapas
+de posiciones sueltas son ilustrativos y las conclusiones salen de los
+promedios.
+
+% =========================== 6. CASO DE APLICACIÓN =====================
+\section{Caso de aplicación: el robot}
+\label{sec:robot}
+
+El agente juega contra una persona en un tablero de ajedrez real. El
+sistema tiene tres partes: \emph{percepción} (ver la jugada de la persona),
+\emph{decisión} (elegir la respuesta) y \emph{expresión} (mostrar la jugada y
+el estado del agente).
+
+\paragraph{Montaje.} Una webcam montada en un trípode mira el tablero desde
+arriba, a aproximadamente un metro de altura, y ve el tablero completo. Una
+pantalla conectada a la computadora muestra las jugadas del robot y una
+cara que expresa su estado. Como el robot no tiene brazo, la persona mueve
+las piezas del robot siguiendo lo que indica la pantalla.
+% Si suben la foto del montaje como figuras/montaje.jpg, aparece sola:
+\IfFileExists{figuras/montaje.jpg}{%
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\textwidth]{montaje.jpg}
+\caption{El montaje: webcam en un trípode sobre el tablero y pantalla con
+las jugadas y la cara del robot.}
+\label{fig:montaje}
+\end{figure}}{}
+
+\paragraph{Percepción.} Al empezar se marcan las cuatro esquinas del
+tablero en la imagen; con eso la imagen se endereza a una vista cenital y se
+divide en 64 casillas. Para detectar una jugada se compara cada casilla
+con una foto de referencia y se elige la jugada \emph{legal} que mejor
+explica las casillas que cambiaron: conocer las reglas filtra el ruido. Con
+la cámara real aparecían cambios falsos (la cámara reajusta sola el brillo,
+algunas luces parpadean y el trípode se puede mover un poco). Lo resolvimos
+normalizando el brillo, tomando la mediana de 15 imágenes quietas y
+comparando de forma tolerante a corrimientos de uno o dos píxeles. En una
+simulación con corrimientos, el detector original acertaba 12 de 23
+jugadas y el nuevo las 23, sin detectar nunca una jugada equivocada. Con
+el montaje real jugamos varias partidas completas y funcionó bien.
+
+\paragraph{Reloj de ajedrez.} La persona avisa que terminó su jugada con la
+barra espaciadora, que funciona como el botón de un reloj de ajedrez real:
+cada jugador tiene un tiempo (por ejemplo, 5 minutos más 3 segundos por
+jugada) y corre el reloj de quien tiene que mover. Si la cámara confirma
+una jugada legal, el reloj pasa al rival; si no, sigue corriendo. El reloj
+del robot corre mientras piensa y hasta que su jugada se hace en el
+tablero. Quien se queda sin tiempo pierde, salvo que al rival no le
+alcance el material para dar mate (tablas), como en el reglamento.
+
+\paragraph{Decisión.} El robot usa la red de 210.000 partidas con búsqueda
+a profundidad 2 y detección de mates, la misma con la que entrenó. Su
+jugada queda pendiente hasta que la cámara confirma que se hizo en el
+tablero.
+
+\paragraph{Expresión.} La pantalla muestra la jugada del robot con una
+flecha sobre un tablero digital y en palabras (``Caballo come en e5,
+jaque''), y una cara que sale de dos señales del propio RL. La
+\emph{confianza} es la chance de ganar $p=(v+1)/2$, y la \emph{sorpresa} es
+el error TD entre dos jugadas seguidas, $\delta=v_t-v_{t-1}$. Si
+$|\delta|>0,16$ la cara se muestra \emph{sorprendida}; si no, según $p$:
+\emph{ganando} ($p\ge0,75$), \emph{confiada} ($p\ge0,5$),
+\emph{preocupada} ($p\ge0,3$) o \emph{perdiendo}. Así, lo que el público ve
+en la cara del robot es literalmente lo que el agente usa para aprender.
+
+\paragraph{¿Por qué?} Un botón muestra sobre el tablero digital el mapa de
+oclusión de la posición actual (\cref{sec:xai}): cuánto vale para el robot
+cada pieza en ese momento. Así la persona puede ver, por ejemplo, que el
+robot está preocupado porque le da mucho valor a un peón rival que está por
+coronar.
+
+% =========================== 7. DISCUSIÓN ==============================
+\section{Discusión y limitaciones}
+
+\begin{itemize}
+\item \textbf{Las correcciones se aplicaron juntas.} Por el diagnóstico,
+  atribuimos la mayor parte a la profundidad 2, pero no corrimos el
+  experimento que separaría el aporte de cada corrección.
+\item \textbf{Una sola semilla.} Por costo de cómputo cada corrida se
+  entrenó una vez: los intervalos cubren el ruido de la medición, no el del
+  entrenamiento.
+\item \textbf{Elo en escala Stockfish.} Los 1240 son de la red de 150k contra
+  Stockfish y no equivalen a un rating humano; el Elo absoluto de la red de
+  210k no se midió (le gana a la de 150k por +148).
+\item \textbf{Entrada incompleta.} La red no ve el enroque, la captura al
+  paso ni las repeticiones.
+\item \textbf{Nueva meseta.} La corrida con correcciones se estabilizó hacia
+  las 200.000 partidas: para seguir mejorando harían falta cambios de fondo
+  (más información de entrada o una red más grande), no solo más partidas.
+\item \textbf{Visión y explicabilidad.} Las pruebas sistemáticas de la
+  visión son simuladas; las reales fueron partidas completas sin un conteo
+  formal de aciertos. La oclusión mide piezas por separado y los mapas
+  sueltos son ilustrativos.
+\end{itemize}
+
+% =========================== 8. CONCLUSIONES ===========================
+\section{Conclusiones y trabajo futuro}
+
+Mostramos que el RL basado en valor, combinado con búsqueda, entrena un
+jugador de ajedrez razonable en una laptop, y que la mejora se puede
+atribuir al aprendizaje con mediciones cuidadosas. El recorrido tuvo cinco
+pasos: (1) desde cero, el RL aprende a evaluar casi como el material sin
+que nadie se lo enseñe; (2) desde el material, suma +36 Elo; (3) seguir
+igual se estanca; (4) diagnosticamos por qué, lo corregimos y la red llega
+a +148 Elo antes de estabilizarse otra vez; (5) la explicabilidad muestra
+que esa mejora tiene contenido de ajedrez real, como el valor de los peones
+avanzados. La lección más general es sobre cómo medir: con 100 partidas
+contra un rival fijo no se veía nada; con enfrentamientos directos y
+predicción fuera de muestra, sí.
+
+Como trabajo futuro: medir el Elo absoluto de la mejor red, separar el
+aporte de cada corrección, darle a la red la información que le falta o una
+red más grande para superar la nueva meseta, buscar conceptos más complejos
+dentro de la red (rey expuesto, estructura de peones) y sumarle un brazo al
+robot.
+
+% =========================== BIBLIOGRAFÍA ==============================
+\clearpage
+\begin{thebibliography}{99}
+\setlength{\itemsep}{2pt}\small
+
+\bibitem[Baxter et~al.(2000)]{baxter2000}
+Baxter, J., Tridgell, A. y Weaver, L. (2000). Learning to play chess using
+temporal differences. \textit{Machine Learning}, 40(3), 243--263.
+
+\bibitem[Bengio et~al.(2009)]{bengio2009}
+Bengio, Y., Louradour, J., Collobert, R. y Weston, J. (2009). Curriculum
+learning. \textit{Proceedings of ICML}.
+
+\bibitem[Brier(1950)]{brier1950}
+Brier, G. W. (1950). Verification of forecasts expressed in terms of
+probability. \textit{Monthly Weather Review}, 78(1), 1--3.
+
+\bibitem[Efron y Tibshirani(1993)]{efron1993}
+Efron, B. y Tibshirani, R. J. (1993). \textit{An Introduction to the
+Bootstrap}. Chapman \& Hall.
+
+\bibitem[Elo(1978)]{elo1978}
+Elo, A. E. (1978). \textit{The Rating of Chessplayers, Past and Present}.
+Arco.
+
+\bibitem[He et~al.(2016)]{he2016}
+He, K., Zhang, X., Ren, S. y Sun, J. (2016). Deep residual learning for
+image recognition. \textit{Proceedings of CVPR}.
+
+\bibitem[Huber(1964)]{huber1964}
+Huber, P. J. (1964). Robust estimation of a location parameter.
+\textit{Annals of Mathematical Statistics}, 35(1), 73--101.
+
+\bibitem[Kingma y Ba(2015)]{kingma2015}
+Kingma, D. P. y Ba, J. (2015). Adam: a method for stochastic optimization.
+\textit{Proceedings of ICLR}.
+
+\bibitem[Knuth y Moore(1975)]{knuth1975}
+Knuth, D. E. y Moore, R. W. (1975). An analysis of alpha-beta pruning.
+\textit{Artificial Intelligence}, 6(4), 293--326.
+
+\bibitem[Lai(2015)]{lai2015}
+Lai, M. (2015). \textit{Giraffe: using deep reinforcement learning to play
+chess}. Tesis de maestría, Imperial College London.
+
+\bibitem[Lichess(2013)]{lichess}
+Lichess (2013). \textit{Lichess open database}, partidas de enero y febrero
+de 2013. \url{https://database.lichess.org}.
+
+\bibitem[Lin(1992)]{lin1992}
+Lin, L.-J. (1992). Self-improving reactive agents based on reinforcement
+learning, planning and teaching. \textit{Machine Learning}, 8, 293--321.
+
+\bibitem[Shannon(1950)]{shannon1950}
+Shannon, C. E. (1950). Programming a computer for playing chess.
+\textit{Philosophical Magazine}, 41(314), 256--275.
+
+\bibitem[Silver et~al.(2018)]{silver2018}
+Silver, D. et~al. (2018). A general reinforcement learning algorithm that
+masters chess, shogi, and Go through self-play. \textit{Science}, 362(6419),
+1140--1144.
+
+\bibitem[Stockfish(s.f.)]{stockfish}
+Stockfish. Motor de ajedrez de código abierto.
+\url{https://stockfishchess.org}.
+
+\bibitem[Sutton(1988)]{sutton1988}
+Sutton, R. S. (1988). Learning to predict by the methods of temporal
+differences. \textit{Machine Learning}, 3(1), 9--44.
+
+\bibitem[Sutton y Barto(2018)]{sutton2018}
+Sutton, R. S. y Barto, A. G. (2018). \textit{Reinforcement Learning: An
+Introduction}, 2.ª ed. MIT Press.
+
+\bibitem[Tesauro(1995)]{tesauro1995}
+Tesauro, G. (1995). Temporal difference learning and TD-Gammon.
+\textit{Communications of the ACM}, 38(3), 58--68.
+
+\bibitem[Veness et~al.(2009)]{veness2009}
+Veness, J., Silver, D., Uther, W. y Blair, A. (2009). Bootstrapping from
+game tree search. \textit{Advances in NeurIPS}, 22.
+
+\bibitem[Wilson(1927)]{wilson1927}
+Wilson, E. B. (1927). Probable inference, the law of succession, and
+statistical inference. \textit{Journal of the American Statistical
+Association}, 22(158), 209--212.
+
+\bibitem[Zeiler y Fergus(2014)]{zeiler2014}
+Zeiler, M. D. y Fergus, R. (2014). Visualizing and understanding
+convolutional networks. \textit{Proceedings of ECCV}, 818--833.
+
+\end{thebibliography}
+
+% =========================== ANEXOS ====================================
+\appendix
+\clearpage
+\section{Hiperparámetros}
+\label{anx:hiper}
+
+\begin{table}[h]
+\centering\footnotesize
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.3\textwidth}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+Parámetro & \texttt{final} / \texttt{final\_sf} & \texttt{mejoras} \\
+\midrule
+Profundidad de búsqueda / quiescencia & 1 / 4 & 2 con poda / 4, mates en 1 \\
+Algoritmo & mixto (TreeStrap + TD-Leaf) & igual \\
+$\lambda$ / repeticiones de cada muestra TD & 0,7 / 4 & igual \\
+Muestras de TreeStrap por jugada & 8 (raíz + 7 al azar) & igual \\
+Temperatura de exploración & 0,05 en todas las jugadas & 0,05 en las 10 primeras; 0 contra Stockfish \\
+Largo del autojuego & tramos de 30 jugadas & 20\,\% hasta el final (máx.\ 200) \\
+Rivales & autojuego 60\,\%, viejos 15\,\%, Stockfish 25\,\%$^{*}$ & igual, con 6 escalones al azar \\
+Memoria / lote / usos por muestra & 400.000 / 512 / 2,0 & 2.000.000 / 512 / 2,0 \\
+Optimizador \citep{kingma2015} & Adam, $5\cdot10^{-4}$, decaimiento $10^{-5}$ & tasa lineal de $5\cdot10^{-4}$ a $10^{-4}$ \\
+Pérdida \citep{huber1964} & Huber ($\beta=0,1$) & igual \\
+Procesos que juegan & 7 (RTX 4050) / 6 (Apple M1) & 7 (RTX 4050) \\
+\bottomrule
+\end{tabularx}
+\caption{Hiperparámetros principales. $^{*}$\texttt{final} no usó Stockfish
+(autojuego y versiones viejas).}
+\end{table}
+
+\section{Detalles técnicos}
+\label{anx:tecnico}
+
+\paragraph{Búsqueda en lote.} Todas las hojas se evalúan juntas, de modo
+que la red corre una vez por jugada. La quiescencia de las hojas usa solo
+material (P 100, C 320, A 330, T 500, D 900 centipeones) con poda delta, y
+la posición tranquila resultante es la que va a la red. La poda alfa-beta a
+profundidad 2 tiene tres pasos: se explora completa la mejor jugada según
+profundidad 1; de las demás se evalúan en un lote las 4 primeras
+respuestas; y las que no quedan refutadas se siguen por tandas. En 150
+posiciones reales da el mismo valor de la raíz que el árbol completo
+(diferencia máxima $2\cdot10^{-7}$).
+
+\paragraph{Experiencia y objetivo mixto.} Cada partida arranca de una
+posición de Lichess de enero de 2013 más una jugada al azar. El autojuego se
+juega en tramos de 30 jugadas; si no termina, se adjudica por material: la
+ventaja $c$ en centipeones se lleva a $z=\tanh(c\ln10/800)$. En cada jugada
+se guardan hasta 8 muestras de TreeStrap y, al terminar, una de TD-Leaf por
+jugada, repetida 4 veces para equilibrar su peso. La pérdida es Huber,
+robusta a los objetivos atípicos de TD.
+
+\paragraph{Diagnóstico completo de la meseta.} Además de las tres causas de
+la \cref{sec:meseta}: el currículo medía al agente con exploración, el
+88\,\% del autojuego se adjudicaba por material (algo que la red ya sabía)
+y la memoria de 400.000 muestras equivalía a unos 4 minutos de juego. Las
+correcciones completas: profundidad 2 con poda, mates en 1, 6 escalones de
+Stockfish que juegan al azar con probabilidad 0,8 a 0,1, currículo medido
+sin exploración, exploración solo en las 10 primeras jugadas, 20\,\% del
+autojuego hasta el final, memoria de 2 millones de muestras y una tasa de
+aprendizaje que baja de $5\cdot10^{-4}$ a $10^{-4}$.
+
+\paragraph{Mediciones.} El enfrentamiento directo arranca de posiciones
+reales entre las jugadas 5 y 15 con material parejo; como las redes son
+deterministas, eso da variedad, y el intervalo se calcula por par de
+partidas. Control: una red contra sí misma da 0,500. En la predicción, los
+cambios de piezas pendientes se resuelven con la quiescencia y el bootstrap
+es pareado por partida: lo que importa es el intervalo de la diferencia
+entre redes. También medimos el error de Brier \citep{brier1950}, que
+mejora en forma significativa ($-0,007$ para 180k y 210k), y los puntajes
+de la escalera se reportan con el intervalo de Wilson \citep{wilson1927}.
+Desde las 190.000 partidas la red se vuelve más segura de sus valores sin
+ordenarlos mejor: el AUC no cambia y el LogLoss empeora levemente.
+
+\paragraph{Oclusión.} El valor $v$ se pasa a peones con la escala del
+preentrenamiento de la red de material:
+$c=800/\ln 10\cdot\operatorname{atanh}(v)$ centipeones. Las posiciones son
+tranquilas (sin jaque y sin capturas pendientes) y se descartan las que
+quedan ilegales al sacar una pieza. Los intervalos son por bootstrap de
+posiciones. La red de material ordena bien las piezas pero con valores
+encogidos hacia 0 (efecto del error cuadrático sobre posiciones casi
+parejas); tras el RL los cocientes entre piezas también cambian, así que el
+cambio no es solo de escala.
+
+\section{Calibración de las redes}
+\label{anx:calib}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\textwidth]{valor_calibracion.jpeg}
+\caption{Proporción real de puntos frente a la chance de ganar que da cada
+red, en las posiciones de febrero de 2013. Todas las redes están cerca de la
+diagonal; el predictor de material puro es el más alejado en las posiciones
+desfavorables.}
+\end{figure}
+
+\section{Reproducción}
+
+El código está en el repositorio del proyecto (Python con PyTorch y
+\texttt{python-chess}, sin notebooks). Comandos principales:
+
+{\small
+\begin{verbatim}
+# Red de material y corrida principal
+python preentrenar_material.py --out checkpoints/material.pt --fens data/fens.txt
+python entrenar.py --out runs/final --init checkpoints/material.pt --algo mixto \
+    --start lichess --fens data/fens.txt --workers 7 --games 150000
+
+# Corrida con las correcciones (hasta 210.000 partidas)
+python entrenar.py --out runs/mejoras --init runs/final/ck_150000.pt --resume \
+    --algo mixto --start lichess --fens data/fens.txt --stockfish RUTA \
+    --workers 7 --games 60000 --depth 2 --poda --mates --sf-azar \
+    --temp-stockfish 0 --temp-jugadas 10 --p-completas 0.2 \
+    --buffer 2000000 --lr-final 1e-4
+
+# Mediciones de atribución (todas juntas: bash lanzar_mediciones.sh)
+python medir_valor.py --pgn data/lichess_db_standard_rated_2013-02.pgn.zst \
+    --ck sin_rl=runs/final/ck_000000.pt rl=runs/final/ck_150000.pt
+python duelo.py --a runs/mejoras/ck_210000.pt --b runs/final/ck_150000.pt \
+    --pares 500 --poda
+
+# Explicabilidad por oclusión
+python explicar.py --ck sin_rl=runs/final/ck_000000.pt \
+    rl_150k=runs/final/ck_150000.pt mej_210k=runs/mejoras/ck_210000.pt
+
+# Jugar contra el robot (webcam, o --sin-camara para el simulador)
+python chesscam/chesscam.py --ck runs/mejoras/ck_210000.pt --reloj 5+3
+\end{verbatim}
+}
+
+\end{document}

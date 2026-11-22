@@ -1,11 +1,12 @@
 # CLAUDE.md: robot de ajedrez con aprendizaje por refuerzo
 
 Contexto completo del proyecto para trabajar desde cualquier máquina (Windows con NVIDIA o Mac con Apple Silicon).
-Leer entero antes de tocar código o lanzar corridas. Estado al 21/11/2026 (secciones 4.4 y 4.5): el RL mejora al
-agente de forma significativa (+36 Elo sobre `ck_000000`), la continuación a profundidad 1 suma poco (+31) y se
-estanca, y la corrida con las mejoras (profundidad 2) da **+114 Elo** sobre 150k. Mejor red medida:
-`runs/mejoras/ck_180000.pt`. **`runs/mejoras` terminó en 210.000** (21/11, laptop con GPU) sin colapso; 195k a 210k
-todavía sin medir. Qué falta y en qué orden: **pendiente 1** (sección 8).
+Leer entero antes de tocar código o lanzar corridas. Estado al 22/11/2026, **experimentos cerrados** (secciones
+4.4 a 4.6): el RL mejora al agente de forma significativa (+36 Elo sobre `ck_000000`), la continuación a
+profundidad 1 suma poco (+31) y se estanca, y la corrida con las mejoras (profundidad 2) da +114 Elo sobre 150k en
+180k y **+148 en 210k**, donde se amesetó. **Checkpoint del robot: `runs/mejoras/ck_210000.pt`.** La
+explicabilidad por oclusión (`explicar.py`, 4.6) muestra qué aprendió. Cámara, pantalla y reloj probados con el
+hardware real (22/11). Falta: informe y presentación del 26/11 (pendiente 10).
 
 ---
 
@@ -18,8 +19,8 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 (valor = confianza, error TD = sorpresa).
 
 - **Objetivo de fuerza:** unos 1000 de Elo. Medido con `ck_150000`: ≈ 1240 (IC 95 %: 1200 a 1280, 300 partidas,
-  escala Stockfish por tiempo). `runs/mejoras/ck_180000.pt` le gana a 150k por +114 Elo en enfrentamiento directo;
-  su Elo absoluto contra Stockfish todavía no se midió.
+  escala Stockfish por tiempo). `runs/mejoras/ck_210000.pt` (el del robot) le gana a 150k por +148 Elo en
+  enfrentamiento directo; su Elo absoluto contra Stockfish todavía no se midió.
 - **Entrega y presentación:** clase 31, **jueves 26/11/2026**. Informe + proyecto Python en este repo
   (**sin notebooks**). Tiene que tener marco teórico de los métodos y un caso de aplicación. Se evalúa la
   originalidad y se tiene en cuenta el tamaño del grupo. El tema (RL) se elige antes con la herramienta de la web
@@ -54,6 +55,7 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 | `posiciones_lichess.py` | PGN de Lichess → archivo de FEN (`data/fens.txt`) para arrancar partidas desde posiciones reales | usado |
 | `evaluar.py` | Evalúa checkpoints contra la escalera fija → `curva*.csv`. Opciones nuevas: `--poda`, `--mates`, `--sf-nodes` | **en uso** |
 | `lanzar_final_sf.sh`, `lanzar_mejoras.sh` | Scripts de la Mac: verifican el entorno y lanzan una corrida con `caffeinate` (rutas de Homebrew) | solo Mac |
+| `explicar.py` | **Explicabilidad (22/11)**: oclusión de piezas: valor medio de cada pieza y del peón por fila para varias redes, y mapas sobre el tablero (sección 4.6) | **en uso** |
 | `medir_valor.py` | **Medición 1 (17/11)**: qué tan bien predice cada red el resultado de partidas que no vio (Brier, LogLoss, AUC, calibración), con IC por bootstrap de partidas (sección 4.4) | **en uso** |
 | `duelo.py` | **Medición 2 (17/11)**: enfrentamiento directo entre dos redes con la misma búsqueda, aperturas pareadas (cada una con los dos colores), Elo con IC; reanudable | **en uso** |
 | `graficar_mediciones.py` | Gráfico resumen de 4.4 desde los CSV (`runs/mediciones/resumen_atribucion.png`); lo llama el lanzador | en uso |
@@ -86,7 +88,7 @@ Corridas en `runs/`:
 | `runs/treestrap_cero` | v2, TreeStrap puro desde red al azar, 20.000 partidas: **colapsó** |
 | `runs/final_sf` | Continuación de `final` con Stockfish como rival, 150.000 a 300.000 partidas, corrida en la Mac (M1, ≈ 19.000 partidas/h, 7,8 h). **Mejoró +31 Elo** en enfrentamiento directo contra 150k; contra Stockfish con 100 partidas no se veía (4.1 y 4.4) |
 | `runs/confirmar` | `ck_150000`, `ck_230000` y `ck_300000` de `final_sf` evaluados con 100 partidas por rival |
-| `runs/mejoras` | Corrida con las mejoras de 4.3, a profundidad 2 en la laptop con GPU: 150.000 a 180.000 (15 a 17/11), 195.000 (19/11) y **210.000 (terminada el 21/11, sección 4.5)**. **La mejor medida**: +114 Elo contra 150k y +95 contra `final_sf` 300k, y la predicción sigue subiendo en cada checkpoint (4.4). **Checkpoint para el robot: `runs/mejoras/ck_180000.pt`** |
+| `runs/mejoras` | Corrida con las mejoras de 4.3, a profundidad 2 en la laptop con GPU: 150.000 a 180.000 (15 a 17/11), 195.000 (19/11) y **210.000 (terminada el 21/11, sección 4.5)**. **La mejor medida**: 210k da +148 Elo contra 150k, +111 contra `final_sf` 300k y +23 contra 180k; se amesetó entre 195k y 210k (4.4). **Checkpoint para el robot: `runs/mejoras/ck_210000.pt`** |
 | `runs/mediciones` | Mediciones para atribuir al RL (4.4): `valor.csv`, `valor_calibracion.png`, `duelo_*.csv` y resúmenes, `resumen_atribucion.png` |
 | `runs/final` | **Bot final**: init `checkpoints/material.pt`, algo `mixto`, posiciones de Lichess, sin Stockfish, 7 procesos, 150.000 partidas (≈ 12,3 h en la RTX 4050). Fue el checkpoint del robot (`ck_150000.pt`) hasta el 18/11 |
 
@@ -386,7 +388,7 @@ Lectura honesta: la mejora contra minimax2 es clara; contra Stockfish los interv
 | 300.000 | 0,86 | 0,39 | 0,30 a 0,49 | ≈ 1240 |
 
 Juntando las 300 partidas: 0,385, **≈ 1240 de Elo (IC 1200 a 1280)**. Con la medición más fina, `final_sf`
-300k supera a 150k, pero la mejor red medida es `runs/mejoras/ck_180000.pt` (4.4).
+300k supera a 150k, pero la mejor red medida es `runs/mejoras/ck_210000.pt` (4.4).
 
 **Lección de medición:** las curvas de 20 partidas (`runs/final_sf/curva_d2q4.csv`, `curva_fuerza.png`)
 mostraban un pico de 0,65 en 230.000 y una caída a 0,20 en 300.000. Con 100 partidas el pico desapareció:
@@ -535,6 +537,57 @@ versiones viejas):
   más fuerte que 180k: lo dice el enfrentamiento directo (pendiente 1).**
 - Pérdida estable en ≈ 0,05; la tasa estuvo fija en 1e-4 (el plan de `--lr-final` terminó en 180k).
 
+### 4.5b Mediciones de 185k a 210k (19 y 22/11)
+
+| Enfrentamiento directo (1.000 partidas) | Elo del primero [IC 95 %] |
+|---|---|
+| 195k contra 180k | +26 [+14, +39] |
+| 195k contra 150k / contra `final_sf` 300k | +132 [+118, +146] / +118 [+105, +132] |
+| **210k contra 180k** | **+23 [+9, +36]** |
+| **210k contra 150k** / contra `final_sf` 300k | **+148 [+134, +163]** / +111 [+97, +125] |
+
+AUC: 180k 0,799; 185k a 205k entre 0,799 y 0,800; 210k 0,801. El LogLoss empeora un poco desde 190k (deja de ser
+significativamente mejor que la red sin RL): la red se vuelve más segura de sus valores sin ordenarlos mejor.
+Lectura: la fuerza subió ≈ 25 Elo de 180k a 195k y después se amesetó (195k y 210k le sacan lo mismo a 180k);
+la predicción ya se había amesetado en 180k. Por la regla del pendiente 1 (210k le gana a 180k con IC que no
+cruza 0), **el robot usa `ck_210000.pt`**. No se enfrentó 210k contra 195k.
+
+### 4.6 Explicabilidad: qué aprendió la red (22/11, `explicar.py`)
+
+Oclusión: se saca cada pieza (no los reyes) y se mide cuánto cambia el valor de la red para el dueño de la pieza,
+en peones con la escala del preentrenamiento (`cp = 800 / ln 10 * atanh(v)`). Se eligió oclusión y no Grad-CAM
+porque la entrada es binaria (hay o no hay pieza): el gradiente mide "media pieza", que no existe. 3.000
+posiciones tranquilas de Lichess de febrero 2013 (sin jaque ni capturas pendientes), IC por bootstrap de
+posiciones. Corre en CPU en ≈ 1,5 min:
+
+```bash
+python explicar.py --ck sin_rl=runs/final/ck_000000.pt rl_150k=runs/final/ck_150000.pt \
+    mej_210k=runs/mejoras/ck_210000.pt --out runs/explicar
+```
+
+| Pieza (peones) | sin RL | RL 150k | mej 210k | clásico |
+|---|---|---|---|---|
+| peón / caballo / alfil / torre / dama | 0,57 / 1,59 / 1,74 / 2,98 / 5,25 | 0,51 / 1,40 / 1,59 / 2,82 / 6,44 | 0,74 / 2,34 / 2,69 / 4,64 / 9,00 | 1 / 3 / 3 / 5 / 9 |
+| peón en la 7.ª fila | 0,86 [0,76; 0,96] | 1,73 [1,26; 2,27] | 2,45 [1,54; 3,37] | |
+| peón en la 7.ª, relativo al peón de cada red | 1,5 | 3,4 | 3,4 | |
+
+- La red de material tiene el orden correcto (relativo a su peón: 2,9 / 3,1 / 5,3 / 9,4) pero escala "tímida"
+  (el error cuadrático encoge hacia 0). 210k lleva los valores a la escala clásica; parte es que se volvió más
+  segura (como el LogLoss), pero los cocientes también cambian, así que no es solo escala.
+- **Hallazgo principal: el RL aprendió que un peón avanzado vale mucho más** (7.ª fila: 1,5x a 3,4x su peón).
+  El material no distingue filas: eso solo pudo venir de jugar.
+- Mapas (`runs/explicar/mapa_*.png`, sin RL / 210k / diferencia): `peon_pasado` (final armado: el peón vale 0,8
+  y 5,4), `lichess_1` (peón negro en d3 con la dama: 0,9 y 12,3; es el mejor ejemplo para la presentación),
+  `medio_juego` y `lichess_2/3`. Los de Lichess se eligen entre 1.000 por máximo cambio: son casos extremos.
+- Límites: mide piezas por separado (no interacciones); sacar una pieza puede dejar tácticas raras (importancias
+  negativas, como un peón que tapa la columna de su dama, o el -10,7 de `lichess_2`).
+- En `informe.tex`: subsección "Qué aprendió la red" (figuras `valores_piezas.png` y `mapa_lichess_1.png`).
+- **Botón «¿Por qué?» en ChessCam (22/11):** `Bot.porque(board)` en `chesscam/partida.py` hace la misma oclusión
+  (una pasada de la red, instantáneo) sobre la posición actual; la interfaz tiñe la casilla de cada pieza (azul =
+  ayuda a su dueño, rojo = lo perjudica, más fuerte cuanto más pesa), escribe el número en peones y lista en el
+  panel las 3 piezas que más pesan. Se apaga solo al mover o pulsando otra vez. Da los mismos números que
+  `explicar.py` (peón de b5 del final armado: +5,4; peón de d3 de `mapa_lichess_1`: +12,3). Solo con `--ck`.
+
 ## 5. Decisiones de diseño (y por qué)
 
 | Decisión | Motivo |
@@ -601,7 +654,7 @@ python arena.py --games 4 --stockfish /opt/homebrew/bin/stockfish
 python interfaz.py --ck runs/final/ck_150000.pt
 python chesscam/chesscam.py --ck runs/final/ck_150000.pt --sin-camara        # simulador con flechas
 python chesscam/chesscam.py --ck runs/final/ck_150000.pt --bot blancas       # tablero real con webcam
-python chesscam/chesscam.py --ck runs/mejoras/ck_180000.pt --reloj 5+3      # con reloj (5 min + 3 s)
+python chesscam/chesscam.py --ck runs/mejoras/ck_210000.pt --reloj 5+3      # con reloj (5 min + 3 s)
 python chesscam/camtest.py                                                   # si la cámara no abre
 python jugar.py --ck runs/final/ck_150000.pt --color negras
 
@@ -659,7 +712,8 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 
 ## 8. Pendientes (prioridad aproximada)
 
-1. **Medir `runs/mejoras` hasta 210k** (la corrida terminó el 21/11, sección 4.5; falta la medición). Plan del
+1. ~~**Medir `runs/mejoras` hasta 210k**~~ **Hecho el 22/11** (sección 4.5b): 210k le gana a 180k, el robot pasa a
+   210k y los experimentos quedan cerrados. Historia del plan del
    19/11, con el estado al 21/11 (todo se corrió un día):
    - **19/11 (Mac):** 185k, 190k y 195k ya están en `runs/mejoras/` de la Mac. Correr `bash lanzar_mediciones.sh`
      (≈ 2,5 h): predicción de 160k a 195k, y enfrentamientos de 195k contra **180k** (¿sigue aprendiendo?), contra
@@ -677,18 +731,18 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
    - **Cierre de experimentos (22/11):** **no seguir entrenando** (la entrega es el 26/11). Si 210k le gana a 180k
      con un IC que no cruza 0,5, el robot pasa a 210k; si no, queda en 180k (pendiente 2).
 2. **Usar el mejor checkpoint medido en el robot**, `interfaz.py` y ChessCam, con `--depth 2` (es la búsqueda con
-   la que entrenó). Hoy es `runs/mejoras/ck_180000.pt`. Para **probar la pantalla** se le pasó a electrónica
-   `ck_210000.pt` (21/11): todos los checkpoints tienen el mismo formato, así que si se elige otro solo se
-   cambia el archivo.
+   la que entrenó). **Es `runs/mejoras/ck_210000.pt`** (22/11), el mismo que ya tiene electrónica para la
+   pantalla. Probado con cámara, pantalla y reloj reales (22/11): funciona.
 3. **Elo absoluto del mejor checkpoint** (opcional, para la presentación): `evaluar.py` con `--depth 2 --q 4
-   --poda --stockfish ... --sf-nodes 20000` y 100 a 200 partidas sobre `ck_180000` y `ck_150000` en una carpeta
+   --poda --stockfish ... --sf-nodes 20000` y 100 a 200 partidas sobre `ck_210000` y `ck_150000` en una carpeta
    aparte. El ≈ 1240 actual es de 150k con Stockfish por tiempo.
 4. Control de la búsqueda (opcional): `ck_180000` con y sin `--mates` en `duelo.py` contra el mismo rival, para
    separar lo que aporta la búsqueda de lo que aportan los pesos en el robot (en 4.4 todo se midió sin `--mates`).
 5. Si `runs/mejoras` deja de mejorar: agregar los planos de entrada que faltan (enroque, al paso, repeticiones,
    regla de 50) con pesos nuevos en cero, o una red más grande.
-6. Análisis "qué aprendió el RL": comparar la red de ck_0 y la final en posiciones de prueba (peón pasado, rey
-   expuesto, actividad de piezas), y Grad-CAM con `last_features`.
+6. ~~Análisis "qué aprendió el RL"~~ **Hecho el 22/11** con oclusión (sección 4.6), y el botón «¿Por qué?» de
+   ChessCam (3.7) lo muestra en vivo. Queda como trabajo futuro el probing de conceptos (rey expuesto,
+   estructura de peones) sobre `last_features`.
 7. Comparaciones para el informe: λ (0 / 0,7 / 1), TD-Leaf v2 vs mixto, arranque supervisado vs material.
 8. Robot: `robot.py` con `elegir_jugada(tablero) -> (jugada, valor, sorpresa, emocion)`; visión
    `leer_tablero()` / `detectar_jugada()`; cara y voz `mostrar(emocion, texto)`. Cámara a 45 a 50 cm, ≈ 52°.

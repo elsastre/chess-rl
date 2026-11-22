@@ -58,7 +58,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from board_vision import BoardVision, pick_move, normalize_scores, WARP, SQ, VISION_ORIGINAL, FILTRO_NEGRAS
-from partida import Partida, Bot, Reloj, san_es, formato_tiempo, leer_control
+from partida import Partida, Bot, Reloj, san_es, formato_tiempo, leer_control, resumen_porque
 
 CALIB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calib.json")
 CORNER_NAMES = ["a1", "h1", "h8", "a8"]
@@ -68,6 +68,16 @@ HL_LAST, HL_SEL = "#F5E663", "#7FC97F"
 FLECHA_BOT, FLECHA_PISTA = "#15781B", "#2F6FD6"     # verde (jugada del bot) y azul (pista), como en Lichess
 PUNTO, ANILLO_COME = "#5C6E4A", "#B03A2E"
 COLOR_FIN = {"gane": "#a6e3a1", "perdi": "#f38ba8", "tablas": "#f9e2af", "fin": "#9fd3ff"}
+def tinte_porque(base, v, lim):
+    """Mezcla el color de la casilla con azul (la pieza ayuda a su dueño) o rojo (lo perjudica), más fuerte
+    cuanto más pesa. La raíz cuadrada hace visibles también los valores chicos."""
+    t = min(1.0, (abs(v) / lim) ** .5) * .8
+    meta = (47, 111, 214) if v >= 0 else (214, 64, 64)
+    r, g, b = (int(base[i:i + 2], 16) for i in (1, 3, 5))
+    r, g, b = (int(c0 + (c1 - c0) * t) for c0, c1 in zip((r, g, b), meta))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 GLYPH = {"k": "♚", "q": "♛", "r": "♜", "b": "♝", "n": "♞", "p": "♟"}
 GLYPH_OUT = {"k": "♔", "q": "♕", "r": "♖", "b": "♗", "n": "♘", "p": "♙"}
 
@@ -397,6 +407,8 @@ class App:
         bot = self.partida.bot
         self.flipped = bot is not None and self.partida.color_bot == chess.WHITE   # la persona abajo
         self.selected = None
+        self.lim_porque = 1.0
+        self.porque = None             # (fen, {casilla: importancia}) del botón «¿Por qué?», o None
         self.cartel = True             # cartel de fin de partida (se oculta con un clic para ver la posición)
         self.calib_win = None          # ventana de calibración abierta
         self.corners = None
@@ -491,6 +503,7 @@ class App:
             ("Girar tablero", self.flip),
             ("Guardar PGN", self.save_pgn),
             ("Pista", self.hint),
+            ("¿Por qué?", self.toggle_porque),
             ("Bot: hecha", self.bot_move_done),
         ]):
             # takefocus=0: así la barra espaciadora no "pulsa" además el último botón usado
@@ -503,7 +516,7 @@ class App:
         for w in btns.grid_slaves():                # sin camara no hay nada que calibrar ni sincronizar
             if self.cap is None and w.cget("text") in ("Calibrar", "Sincronizar", "Bot: hecha"):
                 w.state(["disabled"])
-            if self.partida.bot is None and w.cget("text") in ("Pista", "Bot: hecha"):
+            if self.partida.bot is None and w.cget("text") in ("Pista", "Bot: hecha", "¿Por qué?"):
                 w.state(["disabled"])
 
         if self.cap is None:                      # modo simulador: en lugar de la camara, un aviso
@@ -557,6 +570,9 @@ class App:
                 col = HL_LAST
             if sq == self.selected:
                 col = HL_SEL
+            imp = self.importancias()
+            if imp is not None and sq in imp:
+                col = tinte_porque(col, imp[sq], self.lim_porque)
             c.create_rectangle(x, y, x + s, y + s, fill=col, outline="")
         # coordenadas
         fnt = ("Helvetica", max(9, s // 7), "bold")
@@ -578,6 +594,14 @@ class App:
                 c.create_text(cx, cy, text=GLYPH_OUT[k], font=pf, fill="black")
             else:
                 c.create_text(cx, cy, text=GLYPH[k], font=pf, fill="#111")
+        imp = self.importancias()
+        if imp is not None:                       # número abajo de cada pieza: cuánto pierde su dueño sin ella
+            fn = ("Helvetica", max(8, s // 6), "bold")
+            for sq, v in imp.items():
+                x, y = self.sq_to_xy(sq)
+                txt = f"{v:+.1f}".replace(".", ",")
+                c.create_rectangle(x + s * .2, y + s * .78, x + s * .8, y + s * .98, fill="#ffffff", outline="")
+                c.create_text(x + s / 2, y + s * .88, text=txt, font=fn, fill="#111")
         if self.board.is_check():
             ksq = self.board.king(self.board.turn)
             x, y = self.sq_to_xy(ksq)
@@ -694,6 +718,10 @@ class App:
             lineas.append(f"El bot jugó: {p.texto_bot} (flecha verde)")
         if p.bot is not None and p.pista is not None:
             lineas.append(f"Pista: {san_es(self.board, p.pista)} (flecha azul)")
+        imp = self.importancias()
+        if imp:
+            lineas.append("¿Por qué? Lo que más pesa para el bot: " + resumen_porque(self.board, imp)
+                          + ". Azul = la pieza ayuda a su dueño; rojo = lo perjudica.")
         self.bot_txt.configure(text="\n".join(lineas), fg=color)
 
     def update_moves_text(self):
@@ -785,6 +813,37 @@ class App:
             self.status_fin()
         elif tipo == "pista":
             self.set_status("La flecha azul es lo que jugaría el bot en tu lugar.", "#9fd3ff")
+        self.draw_board()
+
+    # ------------------------------------------------------------ ¿Por qué?
+    def importancias(self):
+        """El mapa del botón «¿Por qué?» si corresponde a la posición actual (se apaga solo al mover)."""
+        if self.porque is None or self.porque[0] != self.board.fen():
+            return None
+        return self.porque[1]
+
+    def toggle_porque(self):
+        """Muestra u oculta, sobre el tablero, cuánto vale cada pieza para el bot en esta posición (oclusión:
+        se saca cada pieza y se mira cuánto cambia la evaluación de la red; ver explicar.py)."""
+        if self.importancias() is not None:
+            self.porque = None
+            self.draw_board()
+            return
+        bot = self.partida.bot
+        if bot is None:
+            return
+        if self.partida.pensando:
+            self.set_status("Esperá a que el bot termine de pensar.", "#f9e2af")
+            return
+        try:
+            imp = bot.porque(self.board)
+        except Exception as e:
+            self.set_status(f"No pude calcular el «¿Por qué?»: {type(e).__name__}: {e}", "#f38ba8")
+            return
+        self.porque = (self.board.fen(), imp)
+        self.lim_porque = max([1.0] + [abs(v) for v in imp.values()])
+        self.set_status("Número = cuántos peones pierde el dueño de esa pieza si se la saca, según el bot. "
+                        "Se apaga al mover o pulsando otra vez «¿Por qué?».", "#9fd3ff")
         self.draw_board()
 
     def hint(self):

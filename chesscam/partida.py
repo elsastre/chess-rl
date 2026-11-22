@@ -10,6 +10,7 @@ Dos modos:
 
 El bot es la red del proyecto con la busqueda de search.py (la misma que usa el robot).
 """
+import math
 import os
 import queue
 import sys
@@ -163,6 +164,7 @@ class Bot:
         from search import search, make_evaluator, pick_move
         dev = default_device()
         model, _ = load_checkpoint(ck, dev)
+        self.model, self.dev = model, dev
         self.ev, self.search, self.pick, self.depth = make_evaluator(model, dev), search, pick_move, depth
         self.nombre = os.path.basename(ck)
 
@@ -172,6 +174,48 @@ class Bot:
         except TypeError:                                    # search.py viejo, sin mates ni poda
             res = self.search(board, self.ev, self.depth, 4)
         return self.pick(res.moves, 0.0), res.value
+
+    def porque(self, board):
+        """Explicacion por oclusion (como explicar.py): {casilla: cuanto pierde su dueno, en peones, si se saca
+        esa pieza}, segun la red. Los reyes no se sacan; las variantes ilegales se saltean. Una sola pasada."""
+        import numpy as np
+        import torch
+        from encoding import encode
+        tableros, casillas = [board], []
+        for sq, pz in board.piece_map().items():
+            if pz.piece_type == chess.KING:
+                continue
+            b = board.copy(stack=False)
+            b.remove_piece_at(sq)
+            if b.is_valid():
+                tableros.append(b)
+                casillas.append((sq, pz.color))
+        with torch.no_grad():
+            x = torch.from_numpy(np.stack([encode(t) for t in tableros])).float().to(self.dev)
+            v = self.model(x).float().cpu().numpy()
+        peones = 800 / math.log(10) * np.arctanh(np.clip(v, -0.999, 0.999)) / 100   # misma escala que explicar.py
+        res = {}
+        for (sq, col), pv in zip(casillas, peones[1:]):
+            delta = peones[0] - pv                       # lo que pierde el que mueve al sacarla
+            res[sq] = float(delta if col == board.turn else -delta)
+        return res
+
+
+NOMBRE_PIEZA = {chess.PAWN: "Peón", chess.KNIGHT: "Caballo", chess.BISHOP: "Alfil", chess.ROOK: "Torre",
+                chess.QUEEN: "Dama"}
+
+
+def resumen_porque(board, imp, n=3):
+    """Las n piezas que más pesan para el bot (en valor absoluto), en texto."""
+    orden = sorted(imp.items(), key=lambda kv: -abs(kv[1]))[:n]
+    partes = []
+    for sq, v in orden:
+        pz = board.piece_at(sq)
+        color = "blanco" if pz.color == chess.WHITE else "negro"
+        if pz.piece_type in (chess.ROOK, chess.QUEEN):
+            color = "blanca" if pz.color == chess.WHITE else "negra"
+        partes.append(f"{NOMBRE_PIEZA[pz.piece_type]} {color} en {chess.square_name(sq)} ({v:+.1f})".replace(".", ","))
+    return "; ".join(partes)
 
 
 class Partida:
