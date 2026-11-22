@@ -603,3 +603,394 @@ sf_300k contra rl_150k: 500 pares (1000 partidas)
   partidas: 197 victorias, 696 tablas, 107 derrotas de sf_300k
 
 == Terminado (Wed Nov 18 16:11:42 -03 2026) ==
+== Mediciones (Thu Nov 19 20:32:50 -03 2026) | 6 procesos, 500 aperturas por enfrentamiento ==
+Linea de base sin RL: runs/final/ck_000000.pt
+Checkpoints: sin_rl_ck0=runs/final/ck_000000.pt sin_rl_regen=checkpoints/material_regen.pt rl_150k=runs/final/ck_150000.pt sf_200k=runs/final_sf/ck_200000.pt sf_250k=runs/final_sf/ck_250000.pt sf_300k=runs/final_sf/ck_300000.pt mej_160k=runs/mejoras/ck_160000.pt mej_170k=runs/mejoras/ck_170000.pt mej_180k=runs/mejoras/ck_180000.pt mej_185k=runs/mejoras/ck_185000.pt mej_190k=runs/mejoras/ck_190000.pt mej_195k=runs/mejoras/ck_195000.pt
+
+== 1. Prediccion del resultado (Thu Nov 19 20:32:50 -03 2026) ==
+Leyendo data/lichess_db_standard_rated_2013-02.pgn.zst ...
+  1000 partidas, 7914 posiciones
+  2000 partidas, 15821 posiciones
+  3000 partidas, 23714 posiciones
+  4000 partidas, 31629 posiciones
+  5000 partidas, 39536 posiciones
+  6000 partidas, 47484 posiciones
+47484 posiciones de 6000 partidas (17 s). Resultados: 48% gana el que mueve, 4% tablas
+Bootstrap por partida (400 remuestreos)...
+
+Medicion 1: prediccion del resultado (47484 posiciones de 6000 partidas, data/lichess_db_standard_rated_2013-02.pgn.zst)
+Referencia para las diferencias: sin_rl_ck0. IC 95 % por bootstrap de partidas.
+Brier y LogLoss: mas bajo es mejor. AUC: mas alto es mejor. Diferencia significativa si su IC no incluye el 0.
+
+material (sin red)
+   brier    0.1844 [0.1810, 0.1875]   vs ref -0.0014 [-0.0025, -0.0003]  <-- significativa
+   logloss  0.5724 [0.5629, 0.5827]   vs ref +0.0033 [-0.0001, +0.0067]  (no significativa)
+   auc      0.7749 [0.7667, 0.7832]   vs ref +0.0084 [+0.0051, +0.0116]  <-- significativa
+sin_rl_ck0
+   brier    0.1858 [0.1829, 0.1885]   vs ref +0.0000 [+0.0000, +0.0000]
+   logloss  0.5691 [0.5618, 0.5764]   vs ref +0.0000 [+0.0000, +0.0000]
+   auc      0.7665 [0.7583, 0.7745]   vs ref +0.0000 [+0.0000, +0.0000]
+sin_rl_regen
+   brier    0.1850 [0.1816, 0.1878]   vs ref -0.0008 [-0.0018, +0.0000]  (no significativa)
+   logloss  0.5683 [0.5602, 0.5762]   vs ref -0.0009 [-0.0031, +0.0012]  (no significativa)
+   auc      0.7718 [0.7639, 0.7802]   vs ref +0.0052 [+0.0021, +0.0085]  <-- significativa
+rl_150k
+   brier    0.1841 [0.1814, 0.1870]   vs ref -0.0017 [-0.0031, -0.0005]  <-- significativa
+   logloss  0.5683 [0.5621, 0.5755]   vs ref -0.0009 [-0.0043, +0.0025]  (no significativa)
+   auc      0.7818 [0.7740, 0.7887]   vs ref +0.0153 [+0.0108, +0.0199]  <-- significativa
+sf_200k
+   brier    0.1820 [0.1794, 0.1848]   vs ref -0.0038 [-0.0052, -0.0025]  <-- significativa
+   logloss  0.5626 [0.5561, 0.5696]   vs ref -0.0065 [-0.0102, -0.0032]  <-- significativa
+   auc      0.7899 [0.7822, 0.7972]   vs ref +0.0234 [+0.0189, +0.0286]  <-- significativa
+sf_250k
+   brier    0.1815 [0.1790, 0.1842]   vs ref -0.0043 [-0.0057, -0.0031]  <-- significativa
+   logloss  0.5612 [0.5551, 0.5683]   vs ref -0.0079 [-0.0112, -0.0047]  <-- significativa
+   auc      0.7906 [0.7830, 0.7972]   vs ref +0.0241 [+0.0198, +0.0290]  <-- significativa
+sf_300k
+   brier    0.1818 [0.1792, 0.1847]   vs ref -0.0040 [-0.0054, -0.0028]  <-- significativa
+   logloss  0.5618 [0.5551, 0.5691]   vs ref -0.0073 [-0.0106, -0.0042]  <-- significativa
+   auc      0.7904 [0.7825, 0.7974]   vs ref +0.0238 [+0.0195, +0.0286]  <-- significativa
+mej_160k
+   brier    0.1807 [0.1781, 0.1834]   vs ref -0.0051 [-0.0064, -0.0038]  <-- significativa
+   logloss  0.5616 [0.5551, 0.5687]   vs ref -0.0076 [-0.0110, -0.0040]  <-- significativa
+   auc      0.7930 [0.7855, 0.7999]   vs ref +0.0265 [+0.0217, +0.0312]  <-- significativa
+mej_170k
+   brier    0.1801 [0.1774, 0.1829]   vs ref -0.0056 [-0.0072, -0.0042]  <-- significativa
+   logloss  0.5626 [0.5551, 0.5702]   vs ref -0.0065 [-0.0105, -0.0025]  <-- significativa
+   auc      0.7950 [0.7873, 0.8016]   vs ref +0.0284 [+0.0235, +0.0335]  <-- significativa
+mej_180k
+   brier    0.1784 [0.1756, 0.1814]   vs ref -0.0074 [-0.0090, -0.0059]  <-- significativa
+   logloss  0.5621 [0.5544, 0.5708]   vs ref -0.0070 [-0.0110, -0.0028]  <-- significativa
+   auc      0.7993 [0.7916, 0.8060]   vs ref +0.0327 [+0.0278, +0.0377]  <-- significativa
+mej_185k
+   brier    0.1784 [0.1755, 0.1814]   vs ref -0.0074 [-0.0090, -0.0059]  <-- significativa
+   logloss  0.5638 [0.5557, 0.5724]   vs ref -0.0053 [-0.0095, -0.0011]  <-- significativa
+   auc      0.7992 [0.7921, 0.8055]   vs ref +0.0327 [+0.0277, +0.0381]  <-- significativa
+mej_190k
+   brier    0.1784 [0.1753, 0.1815]   vs ref -0.0074 [-0.0091, -0.0059]  <-- significativa
+   logloss  0.5653 [0.5567, 0.5746]   vs ref -0.0038 [-0.0085, +0.0005]  (no significativa)
+   auc      0.7993 [0.7914, 0.8058]   vs ref +0.0327 [+0.0278, +0.0379]  <-- significativa
+mej_195k
+   brier    0.1781 [0.1750, 0.1812]   vs ref -0.0077 [-0.0094, -0.0062]  <-- significativa
+   logloss  0.5661 [0.5575, 0.5754]   vs ref -0.0030 [-0.0075, +0.0016]  (no significativa)
+   auc      0.8000 [0.7921, 0.8071]   vs ref +0.0335 [+0.0289, +0.0388]  <-- significativa
+
+listo en 259 s -> runs/mediciones/valor.csv, valor_resumen.txt, valor_calibracion.png
+
+== 2. Enfrentamiento: rl_150k contra sin_rl_ck0 (Thu Nov 19 20:37:10 -03 2026) ==
+rl_150k contra sin_rl_ck0 | profundidad 2 con poda | 500 aperturas, faltan 0 partidas, 6 procesos
+rl_150k contra sin_rl_ck0: 500 pares (1000 partidas)
+  puntaje de rl_150k: 0.552  IC 95 % [0.537, 0.567]  -> diferencia SIGNIFICATIVA
+  Elo de rl_150k respecto de sin_rl_ck0: +36  [+26, +47]
+  partidas: 185 victorias, 734 tablas, 81 derrotas de rl_150k
+
+== 2. Enfrentamiento: mej_195k contra mej_180k (Thu Nov 19 20:37:11 -03 2026) ==
+mej_195k contra mej_180k | profundidad 2 con poda | 500 aperturas, faltan 1000 partidas, 6 procesos
+[20/1000] faltan ~57 min | puntaje de mej_195k: 0.639  IC 95 % [0.473, 0.804]  -> diferencia no significativa
+[40/1000] faltan ~49 min | puntaje de mej_195k: 0.632  IC 95 % [0.523, 0.740]  -> diferencia SIGNIFICATIVA
+[60/1000] faltan ~47 min | puntaje de mej_195k: 0.621  IC 95 % [0.541, 0.700]  -> diferencia SIGNIFICATIVA
+[80/1000] faltan ~45 min | puntaje de mej_195k: 0.606  IC 95 % [0.543, 0.669]  -> diferencia SIGNIFICATIVA
+[100/1000] faltan ~45 min | puntaje de mej_195k: 0.582  IC 95 % [0.520, 0.643]  -> diferencia SIGNIFICATIVA
+[120/1000] faltan ~43 min | puntaje de mej_195k: 0.567  IC 95 % [0.513, 0.620]  -> diferencia SIGNIFICATIVA
+[140/1000] faltan ~41 min | puntaje de mej_195k: 0.562  IC 95 % [0.514, 0.609]  -> diferencia SIGNIFICATIVA
+[160/1000] faltan ~41 min | puntaje de mej_195k: 0.575  IC 95 % [0.530, 0.620]  -> diferencia SIGNIFICATIVA
+[180/1000] faltan ~39 min | puntaje de mej_195k: 0.570  IC 95 % [0.528, 0.612]  -> diferencia SIGNIFICATIVA
+[200/1000] faltan ~39 min | puntaje de mej_195k: 0.563  IC 95 % [0.523, 0.604]  -> diferencia SIGNIFICATIVA
+[220/1000] faltan ~37 min | puntaje de mej_195k: 0.552  IC 95 % [0.512, 0.593]  -> diferencia SIGNIFICATIVA
+[240/1000] faltan ~35 min | puntaje de mej_195k: 0.548  IC 95 % [0.510, 0.587]  -> diferencia SIGNIFICATIVA
+[260/1000] faltan ~35 min | puntaje de mej_195k: 0.548  IC 95 % [0.512, 0.585]  -> diferencia SIGNIFICATIVA
+[280/1000] faltan ~34 min | puntaje de mej_195k: 0.547  IC 95 % [0.512, 0.582]  -> diferencia SIGNIFICATIVA
+[300/1000] faltan ~33 min | puntaje de mej_195k: 0.539  IC 95 % [0.505, 0.572]  -> diferencia SIGNIFICATIVA
+[320/1000] faltan ~32 min | puntaje de mej_195k: 0.544  IC 95 % [0.511, 0.577]  -> diferencia SIGNIFICATIVA
+[340/1000] faltan ~31 min | puntaje de mej_195k: 0.544  IC 95 % [0.513, 0.575]  -> diferencia SIGNIFICATIVA
+[360/1000] faltan ~30 min | puntaje de mej_195k: 0.547  IC 95 % [0.517, 0.577]  -> diferencia SIGNIFICATIVA
+[380/1000] faltan ~29 min | puntaje de mej_195k: 0.556  IC 95 % [0.526, 0.585]  -> diferencia SIGNIFICATIVA
+[400/1000] faltan ~28 min | puntaje de mej_195k: 0.554  IC 95 % [0.525, 0.583]  -> diferencia SIGNIFICATIVA
+[420/1000] faltan ~27 min | puntaje de mej_195k: 0.553  IC 95 % [0.524, 0.581]  -> diferencia SIGNIFICATIVA
+[440/1000] faltan ~26 min | puntaje de mej_195k: 0.554  IC 95 % [0.526, 0.581]  -> diferencia SIGNIFICATIVA
+[460/1000] faltan ~25 min | puntaje de mej_195k: 0.552  IC 95 % [0.526, 0.579]  -> diferencia SIGNIFICATIVA
+[480/1000] faltan ~24 min | puntaje de mej_195k: 0.551  IC 95 % [0.525, 0.577]  -> diferencia SIGNIFICATIVA
+[500/1000] faltan ~23 min | puntaje de mej_195k: 0.549  IC 95 % [0.524, 0.575]  -> diferencia SIGNIFICATIVA
+[520/1000] faltan ~22 min | puntaje de mej_195k: 0.551  IC 95 % [0.526, 0.576]  -> diferencia SIGNIFICATIVA
+[540/1000] faltan ~21 min | puntaje de mej_195k: 0.556  IC 95 % [0.531, 0.582]  -> diferencia SIGNIFICATIVA
+[560/1000] faltan ~20 min | puntaje de mej_195k: 0.557  IC 95 % [0.533, 0.582]  -> diferencia SIGNIFICATIVA
+[580/1000] faltan ~19 min | puntaje de mej_195k: 0.556  IC 95 % [0.532, 0.580]  -> diferencia SIGNIFICATIVA
+[600/1000] faltan ~18 min | puntaje de mej_195k: 0.552  IC 95 % [0.528, 0.577]  -> diferencia SIGNIFICATIVA
+[620/1000] faltan ~17 min | puntaje de mej_195k: 0.552  IC 95 % [0.528, 0.576]  -> diferencia SIGNIFICATIVA
+[640/1000] faltan ~17 min | puntaje de mej_195k: 0.551  IC 95 % [0.527, 0.574]  -> diferencia SIGNIFICATIVA
+[660/1000] faltan ~16 min | puntaje de mej_195k: 0.549  IC 95 % [0.526, 0.573]  -> diferencia SIGNIFICATIVA
+[680/1000] faltan ~15 min | puntaje de mej_195k: 0.549  IC 95 % [0.526, 0.571]  -> diferencia SIGNIFICATIVA
+[700/1000] faltan ~14 min | puntaje de mej_195k: 0.551  IC 95 % [0.529, 0.573]  -> diferencia SIGNIFICATIVA
+[720/1000] faltan ~13 min | puntaje de mej_195k: 0.550  IC 95 % [0.528, 0.572]  -> diferencia SIGNIFICATIVA
+[740/1000] faltan ~12 min | puntaje de mej_195k: 0.549  IC 95 % [0.528, 0.571]  -> diferencia SIGNIFICATIVA
+[760/1000] faltan ~11 min | puntaje de mej_195k: 0.547  IC 95 % [0.526, 0.569]  -> diferencia SIGNIFICATIVA
+[780/1000] faltan ~10 min | puntaje de mej_195k: 0.545  IC 95 % [0.524, 0.566]  -> diferencia SIGNIFICATIVA
+[800/1000] faltan ~9 min | puntaje de mej_195k: 0.543  IC 95 % [0.523, 0.564]  -> diferencia SIGNIFICATIVA
+[820/1000] faltan ~8 min | puntaje de mej_195k: 0.545  IC 95 % [0.525, 0.566]  -> diferencia SIGNIFICATIVA
+[840/1000] faltan ~7 min | puntaje de mej_195k: 0.543  IC 95 % [0.523, 0.563]  -> diferencia SIGNIFICATIVA
+[860/1000] faltan ~6 min | puntaje de mej_195k: 0.541  IC 95 % [0.521, 0.561]  -> diferencia SIGNIFICATIVA
+[880/1000] faltan ~5 min | puntaje de mej_195k: 0.540  IC 95 % [0.521, 0.560]  -> diferencia SIGNIFICATIVA
+[900/1000] faltan ~5 min | puntaje de mej_195k: 0.541  IC 95 % [0.521, 0.560]  -> diferencia SIGNIFICATIVA
+[920/1000] faltan ~4 min | puntaje de mej_195k: 0.541  IC 95 % [0.522, 0.560]  -> diferencia SIGNIFICATIVA
+[940/1000] faltan ~3 min | puntaje de mej_195k: 0.540  IC 95 % [0.521, 0.559]  -> diferencia SIGNIFICATIVA
+[960/1000] faltan ~2 min | puntaje de mej_195k: 0.540  IC 95 % [0.521, 0.558]  -> diferencia SIGNIFICATIVA
+[980/1000] faltan ~1 min | puntaje de mej_195k: 0.539  IC 95 % [0.521, 0.557]  -> diferencia SIGNIFICATIVA
+[1000/1000] faltan ~0 min | puntaje de mej_195k: 0.538  IC 95 % [0.520, 0.556]  -> diferencia SIGNIFICATIVA
+
+mej_195k contra mej_180k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.538  IC 95 % [0.520, 0.556]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de mej_180k: +26  [+14, +39]
+  partidas: 214 victorias, 648 tablas, 138 derrotas de mej_195k
+
+== 2. Enfrentamiento: mej_195k contra rl_150k (Thu Nov 19 21:22:43 -03 2026) ==
+mej_195k contra rl_150k | profundidad 2 con poda | 500 aperturas, faltan 1000 partidas, 6 procesos
+[20/1000] faltan ~53 min | puntaje de mej_195k: 0.750  IC 95 % [0.609, 0.891]  -> diferencia SIGNIFICATIVA
+[40/1000] faltan ~47 min | puntaje de mej_195k: 0.697  IC 95 % [0.581, 0.813]  -> diferencia SIGNIFICATIVA
+[60/1000] faltan ~46 min | puntaje de mej_195k: 0.690  IC 95 % [0.597, 0.783]  -> diferencia SIGNIFICATIVA
+[80/1000] faltan ~44 min | puntaje de mej_195k: 0.688  IC 95 % [0.616, 0.759]  -> diferencia SIGNIFICATIVA
+[100/1000] faltan ~43 min | puntaje de mej_195k: 0.684  IC 95 % [0.622, 0.746]  -> diferencia SIGNIFICATIVA
+[120/1000] faltan ~40 min | puntaje de mej_195k: 0.691  IC 95 % [0.635, 0.747]  -> diferencia SIGNIFICATIVA
+[140/1000] faltan ~39 min | puntaje de mej_195k: 0.703  IC 95 % [0.649, 0.757]  -> diferencia SIGNIFICATIVA
+[160/1000] faltan ~38 min | puntaje de mej_195k: 0.688  IC 95 % [0.639, 0.736]  -> diferencia SIGNIFICATIVA
+[180/1000] faltan ~37 min | puntaje de mej_195k: 0.702  IC 95 % [0.657, 0.748]  -> diferencia SIGNIFICATIVA
+[200/1000] faltan ~36 min | puntaje de mej_195k: 0.699  IC 95 % [0.656, 0.743]  -> diferencia SIGNIFICATIVA
+[220/1000] faltan ~35 min | puntaje de mej_195k: 0.695  IC 95 % [0.654, 0.737]  -> diferencia SIGNIFICATIVA
+[240/1000] faltan ~34 min | puntaje de mej_195k: 0.695  IC 95 % [0.657, 0.734]  -> diferencia SIGNIFICATIVA
+[260/1000] faltan ~33 min | puntaje de mej_195k: 0.698  IC 95 % [0.661, 0.734]  -> diferencia SIGNIFICATIVA
+[280/1000] faltan ~32 min | puntaje de mej_195k: 0.694  IC 95 % [0.660, 0.729]  -> diferencia SIGNIFICATIVA
+[300/1000] faltan ~31 min | puntaje de mej_195k: 0.701  IC 95 % [0.668, 0.734]  -> diferencia SIGNIFICATIVA
+[320/1000] faltan ~30 min | puntaje de mej_195k: 0.698  IC 95 % [0.666, 0.730]  -> diferencia SIGNIFICATIVA
+[340/1000] faltan ~29 min | puntaje de mej_195k: 0.700  IC 95 % [0.669, 0.731]  -> diferencia SIGNIFICATIVA
+[360/1000] faltan ~28 min | puntaje de mej_195k: 0.697  IC 95 % [0.668, 0.727]  -> diferencia SIGNIFICATIVA
+[380/1000] faltan ~27 min | puntaje de mej_195k: 0.697  IC 95 % [0.668, 0.726]  -> diferencia SIGNIFICATIVA
+[400/1000] faltan ~26 min | puntaje de mej_195k: 0.700  IC 95 % [0.672, 0.727]  -> diferencia SIGNIFICATIVA
+[420/1000] faltan ~26 min | puntaje de mej_195k: 0.699  IC 95 % [0.672, 0.725]  -> diferencia SIGNIFICATIVA
+[440/1000] faltan ~25 min | puntaje de mej_195k: 0.703  IC 95 % [0.677, 0.730]  -> diferencia SIGNIFICATIVA
+[460/1000] faltan ~24 min | puntaje de mej_195k: 0.701  IC 95 % [0.675, 0.727]  -> diferencia SIGNIFICATIVA
+[480/1000] faltan ~23 min | puntaje de mej_195k: 0.701  IC 95 % [0.675, 0.726]  -> diferencia SIGNIFICATIVA
+[500/1000] faltan ~22 min | puntaje de mej_195k: 0.699  IC 95 % [0.674, 0.724]  -> diferencia SIGNIFICATIVA
+[520/1000] faltan ~21 min | puntaje de mej_195k: 0.692  IC 95 % [0.668, 0.717]  -> diferencia SIGNIFICATIVA
+[540/1000] faltan ~21 min | puntaje de mej_195k: 0.692  IC 95 % [0.668, 0.716]  -> diferencia SIGNIFICATIVA
+[560/1000] faltan ~20 min | puntaje de mej_195k: 0.690  IC 95 % [0.667, 0.714]  -> diferencia SIGNIFICATIVA
+[580/1000] faltan ~19 min | puntaje de mej_195k: 0.691  IC 95 % [0.668, 0.714]  -> diferencia SIGNIFICATIVA
+[600/1000] faltan ~18 min | puntaje de mej_195k: 0.691  IC 95 % [0.669, 0.714]  -> diferencia SIGNIFICATIVA
+[620/1000] faltan ~17 min | puntaje de mej_195k: 0.692  IC 95 % [0.670, 0.714]  -> diferencia SIGNIFICATIVA
+[640/1000] faltan ~16 min | puntaje de mej_195k: 0.691  IC 95 % [0.669, 0.714]  -> diferencia SIGNIFICATIVA
+[660/1000] faltan ~16 min | puntaje de mej_195k: 0.694  IC 95 % [0.672, 0.716]  -> diferencia SIGNIFICATIVA
+[680/1000] faltan ~15 min | puntaje de mej_195k: 0.691  IC 95 % [0.669, 0.713]  -> diferencia SIGNIFICATIVA
+[700/1000] faltan ~14 min | puntaje de mej_195k: 0.687  IC 95 % [0.666, 0.709]  -> diferencia SIGNIFICATIVA
+[720/1000] faltan ~13 min | puntaje de mej_195k: 0.688  IC 95 % [0.667, 0.709]  -> diferencia SIGNIFICATIVA
+[740/1000] faltan ~12 min | puntaje de mej_195k: 0.686  IC 95 % [0.666, 0.707]  -> diferencia SIGNIFICATIVA
+[760/1000] faltan ~11 min | puntaje de mej_195k: 0.686  IC 95 % [0.666, 0.706]  -> diferencia SIGNIFICATIVA
+[780/1000] faltan ~10 min | puntaje de mej_195k: 0.686  IC 95 % [0.666, 0.706]  -> diferencia SIGNIFICATIVA
+[800/1000] faltan ~9 min | puntaje de mej_195k: 0.684  IC 95 % [0.664, 0.704]  -> diferencia SIGNIFICATIVA
+[820/1000] faltan ~8 min | puntaje de mej_195k: 0.684  IC 95 % [0.665, 0.704]  -> diferencia SIGNIFICATIVA
+[840/1000] faltan ~7 min | puntaje de mej_195k: 0.683  IC 95 % [0.663, 0.702]  -> diferencia SIGNIFICATIVA
+[860/1000] faltan ~7 min | puntaje de mej_195k: 0.684  IC 95 % [0.665, 0.703]  -> diferencia SIGNIFICATIVA
+[880/1000] faltan ~6 min | puntaje de mej_195k: 0.683  IC 95 % [0.665, 0.702]  -> diferencia SIGNIFICATIVA
+[900/1000] faltan ~5 min | puntaje de mej_195k: 0.683  IC 95 % [0.665, 0.702]  -> diferencia SIGNIFICATIVA
+[920/1000] faltan ~4 min | puntaje de mej_195k: 0.682  IC 95 % [0.663, 0.700]  -> diferencia SIGNIFICATIVA
+[940/1000] faltan ~3 min | puntaje de mej_195k: 0.681  IC 95 % [0.663, 0.699]  -> diferencia SIGNIFICATIVA
+[960/1000] faltan ~2 min | puntaje de mej_195k: 0.681  IC 95 % [0.663, 0.699]  -> diferencia SIGNIFICATIVA
+[980/1000] faltan ~1 min | puntaje de mej_195k: 0.678  IC 95 % [0.660, 0.696]  -> diferencia SIGNIFICATIVA
+[1000/1000] faltan ~0 min | puntaje de mej_195k: 0.681  IC 95 % [0.664, 0.698]  -> diferencia SIGNIFICATIVA
+
+mej_195k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.681  IC 95 % [0.664, 0.698]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de rl_150k: +132  [+118, +146]
+  partidas: 412 victorias, 538 tablas, 50 derrotas de mej_195k
+
+== 2. Enfrentamiento: mej_195k contra sf_300k (Thu Nov 19 22:10:40 -03 2026) ==
+mej_195k contra sf_300k | profundidad 2 con poda | 500 aperturas, faltan 1000 partidas, 6 procesos
+[20/1000] faltan ~61 min | puntaje de mej_195k: 0.722  IC 95 % [0.624, 0.820]  -> diferencia SIGNIFICATIVA
+[40/1000] faltan ~433 min | puntaje de mej_195k: 0.684  IC 95 % [0.594, 0.775]  -> diferencia SIGNIFICATIVA
+[60/1000] faltan ~449 min | puntaje de mej_195k: 0.681  IC 95 % [0.617, 0.745]  -> diferencia SIGNIFICATIVA
+[80/1000] faltan ~511 min | puntaje de mej_195k: 0.679  IC 95 % [0.626, 0.733]  -> diferencia SIGNIFICATIVA
+[100/1000] faltan ~424 min | puntaje de mej_195k: 0.658  IC 95 % [0.611, 0.705]  -> diferencia SIGNIFICATIVA
+[120/1000] faltan ~385 min | puntaje de mej_195k: 0.646  IC 95 % [0.602, 0.690]  -> diferencia SIGNIFICATIVA
+[140/1000] faltan ~424 min | puntaje de mej_195k: 0.643  IC 95 % [0.603, 0.684]  -> diferencia SIGNIFICATIVA
+[160/1000] faltan ~367 min | puntaje de mej_195k: 0.646  IC 95 % [0.606, 0.685]  -> diferencia SIGNIFICATIVA
+[180/1000] faltan ~322 min | puntaje de mej_195k: 0.642  IC 95 % [0.603, 0.680]  -> diferencia SIGNIFICATIVA
+[200/1000] faltan ~287 min | puntaje de mej_195k: 0.649  IC 95 % [0.612, 0.685]  -> diferencia SIGNIFICATIVA
+[220/1000] faltan ~257 min | puntaje de mej_195k: 0.657  IC 95 % [0.621, 0.693]  -> diferencia SIGNIFICATIVA
+[240/1000] faltan ~232 min | puntaje de mej_195k: 0.662  IC 95 % [0.627, 0.697]  -> diferencia SIGNIFICATIVA
+[260/1000] faltan ~211 min | puntaje de mej_195k: 0.657  IC 95 % [0.622, 0.692]  -> diferencia SIGNIFICATIVA
+[280/1000] faltan ~193 min | puntaje de mej_195k: 0.662  IC 95 % [0.630, 0.695]  -> diferencia SIGNIFICATIVA
+[300/1000] faltan ~178 min | puntaje de mej_195k: 0.661  IC 95 % [0.629, 0.693]  -> diferencia SIGNIFICATIVA
+[320/1000] faltan ~164 min | puntaje de mej_195k: 0.657  IC 95 % [0.626, 0.688]  -> diferencia SIGNIFICATIVA
+[340/1000] faltan ~151 min | puntaje de mej_195k: 0.655  IC 95 % [0.625, 0.686]  -> diferencia SIGNIFICATIVA
+[360/1000] faltan ~140 min | puntaje de mej_195k: 0.654  IC 95 % [0.624, 0.685]  -> diferencia SIGNIFICATIVA
+[380/1000] faltan ~130 min | puntaje de mej_195k: 0.657  IC 95 % [0.628, 0.687]  -> diferencia SIGNIFICATIVA
+[400/1000] faltan ~121 min | puntaje de mej_195k: 0.657  IC 95 % [0.629, 0.686]  -> diferencia SIGNIFICATIVA
+[420/1000] faltan ~113 min | puntaje de mej_195k: 0.659  IC 95 % [0.631, 0.687]  -> diferencia SIGNIFICATIVA
+[440/1000] faltan ~105 min | puntaje de mej_195k: 0.661  IC 95 % [0.634, 0.688]  -> diferencia SIGNIFICATIVA
+[460/1000] faltan ~98 min | puntaje de mej_195k: 0.663  IC 95 % [0.636, 0.689]  -> diferencia SIGNIFICATIVA
+[480/1000] faltan ~91 min | puntaje de mej_195k: 0.666  IC 95 % [0.640, 0.692]  -> diferencia SIGNIFICATIVA
+[500/1000] faltan ~85 min | puntaje de mej_195k: 0.664  IC 95 % [0.639, 0.689]  -> diferencia SIGNIFICATIVA
+[520/1000] faltan ~79 min | puntaje de mej_195k: 0.666  IC 95 % [0.641, 0.691]  -> diferencia SIGNIFICATIVA
+[540/1000] faltan ~74 min | puntaje de mej_195k: 0.664  IC 95 % [0.640, 0.688]  -> diferencia SIGNIFICATIVA
+[560/1000] faltan ~69 min | puntaje de mej_195k: 0.661  IC 95 % [0.637, 0.685]  -> diferencia SIGNIFICATIVA
+[580/1000] faltan ~64 min | puntaje de mej_195k: 0.663  IC 95 % [0.639, 0.686]  -> diferencia SIGNIFICATIVA
+[600/1000] faltan ~59 min | puntaje de mej_195k: 0.661  IC 95 % [0.637, 0.684]  -> diferencia SIGNIFICATIVA
+[620/1000] faltan ~55 min | puntaje de mej_195k: 0.661  IC 95 % [0.638, 0.684]  -> diferencia SIGNIFICATIVA
+[640/1000] faltan ~51 min | puntaje de mej_195k: 0.660  IC 95 % [0.637, 0.683]  -> diferencia SIGNIFICATIVA
+[660/1000] faltan ~47 min | puntaje de mej_195k: 0.660  IC 95 % [0.637, 0.682]  -> diferencia SIGNIFICATIVA
+[680/1000] faltan ~44 min | puntaje de mej_195k: 0.657  IC 95 % [0.635, 0.679]  -> diferencia SIGNIFICATIVA
+[700/1000] faltan ~40 min | puntaje de mej_195k: 0.659  IC 95 % [0.637, 0.681]  -> diferencia SIGNIFICATIVA
+[720/1000] faltan ~37 min | puntaje de mej_195k: 0.662  IC 95 % [0.641, 0.684]  -> diferencia SIGNIFICATIVA
+[740/1000] faltan ~33 min | puntaje de mej_195k: 0.659  IC 95 % [0.638, 0.680]  -> diferencia SIGNIFICATIVA
+[760/1000] faltan ~30 min | puntaje de mej_195k: 0.660  IC 95 % [0.640, 0.681]  -> diferencia SIGNIFICATIVA
+[780/1000] faltan ~27 min | puntaje de mej_195k: 0.662  IC 95 % [0.642, 0.682]  -> diferencia SIGNIFICATIVA
+[800/1000] faltan ~24 min | puntaje de mej_195k: 0.662  IC 95 % [0.642, 0.682]  -> diferencia SIGNIFICATIVA
+[820/1000] faltan ~22 min | puntaje de mej_195k: 0.663  IC 95 % [0.643, 0.682]  -> diferencia SIGNIFICATIVA
+[840/1000] faltan ~19 min | puntaje de mej_195k: 0.662  IC 95 % [0.643, 0.682]  -> diferencia SIGNIFICATIVA
+[860/1000] faltan ~16 min | puntaje de mej_195k: 0.661  IC 95 % [0.642, 0.680]  -> diferencia SIGNIFICATIVA
+[880/1000] faltan ~14 min | puntaje de mej_195k: 0.663  IC 95 % [0.644, 0.682]  -> diferencia SIGNIFICATIVA
+[900/1000] faltan ~11 min | puntaje de mej_195k: 0.663  IC 95 % [0.644, 0.682]  -> diferencia SIGNIFICATIVA
+[920/1000] faltan ~9 min | puntaje de mej_195k: 0.661  IC 95 % [0.643, 0.680]  -> diferencia SIGNIFICATIVA
+[940/1000] faltan ~7 min | puntaje de mej_195k: 0.660  IC 95 % [0.642, 0.679]  -> diferencia SIGNIFICATIVA
+[960/1000] faltan ~4 min | puntaje de mej_195k: 0.662  IC 95 % [0.644, 0.680]  -> diferencia SIGNIFICATIVA
+[980/1000] faltan ~2 min | puntaje de mej_195k: 0.663  IC 95 % [0.645, 0.681]  -> diferencia SIGNIFICATIVA
+[1000/1000] faltan ~0 min | puntaje de mej_195k: 0.664  IC 95 % [0.646, 0.682]  -> diferencia SIGNIFICATIVA
+
+mej_195k contra sf_300k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.664  IC 95 % [0.646, 0.682]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de sf_300k: +118  [+105, +132]
+  partidas: 392 victorias, 544 tablas, 64 derrotas de mej_195k
+
+== 2. Enfrentamiento: sf_300k contra rl_150k (Thu Nov 19 23:57:14 -03 2026) ==
+sf_300k contra rl_150k | profundidad 2 con poda | 500 aperturas, faltan 0 partidas, 6 procesos
+sf_300k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+  Elo de sf_300k respecto de rl_150k: +31  [+20, +43]
+  partidas: 197 victorias, 696 tablas, 107 derrotas de sf_300k
+guardado -> runs/mediciones/resumen_atribucion.png
+
+== RESUMEN (Thu Nov 19 23:57:16 -03 2026) ==
+Medicion 1: prediccion del resultado (47484 posiciones de 6000 partidas, data/lichess_db_standard_rated_2013-02.pgn.zst)
+Referencia para las diferencias: sin_rl_ck0. IC 95 % por bootstrap de partidas.
+Brier y LogLoss: mas bajo es mejor. AUC: mas alto es mejor. Diferencia significativa si su IC no incluye el 0.
+
+material (sin red)
+   brier    0.1844 [0.1810, 0.1875]   vs ref -0.0014 [-0.0025, -0.0003]  <-- significativa
+   logloss  0.5724 [0.5629, 0.5827]   vs ref +0.0033 [-0.0001, +0.0067]  (no significativa)
+   auc      0.7749 [0.7667, 0.7832]   vs ref +0.0084 [+0.0051, +0.0116]  <-- significativa
+sin_rl_ck0
+   brier    0.1858 [0.1829, 0.1885]   vs ref +0.0000 [+0.0000, +0.0000]
+   logloss  0.5691 [0.5618, 0.5764]   vs ref +0.0000 [+0.0000, +0.0000]
+   auc      0.7665 [0.7583, 0.7745]   vs ref +0.0000 [+0.0000, +0.0000]
+sin_rl_regen
+   brier    0.1850 [0.1816, 0.1878]   vs ref -0.0008 [-0.0018, +0.0000]  (no significativa)
+   logloss  0.5683 [0.5602, 0.5762]   vs ref -0.0009 [-0.0031, +0.0012]  (no significativa)
+   auc      0.7718 [0.7639, 0.7802]   vs ref +0.0052 [+0.0021, +0.0085]  <-- significativa
+rl_150k
+   brier    0.1841 [0.1814, 0.1870]   vs ref -0.0017 [-0.0031, -0.0005]  <-- significativa
+   logloss  0.5683 [0.5621, 0.5755]   vs ref -0.0009 [-0.0043, +0.0025]  (no significativa)
+   auc      0.7818 [0.7740, 0.7887]   vs ref +0.0153 [+0.0108, +0.0199]  <-- significativa
+sf_200k
+   brier    0.1820 [0.1794, 0.1848]   vs ref -0.0038 [-0.0052, -0.0025]  <-- significativa
+   logloss  0.5626 [0.5561, 0.5696]   vs ref -0.0065 [-0.0102, -0.0032]  <-- significativa
+   auc      0.7899 [0.7822, 0.7972]   vs ref +0.0234 [+0.0189, +0.0286]  <-- significativa
+sf_250k
+   brier    0.1815 [0.1790, 0.1842]   vs ref -0.0043 [-0.0057, -0.0031]  <-- significativa
+   logloss  0.5612 [0.5551, 0.5683]   vs ref -0.0079 [-0.0112, -0.0047]  <-- significativa
+   auc      0.7906 [0.7830, 0.7972]   vs ref +0.0241 [+0.0198, +0.0290]  <-- significativa
+sf_300k
+   brier    0.1818 [0.1792, 0.1847]   vs ref -0.0040 [-0.0054, -0.0028]  <-- significativa
+   logloss  0.5618 [0.5551, 0.5691]   vs ref -0.0073 [-0.0106, -0.0042]  <-- significativa
+   auc      0.7904 [0.7825, 0.7974]   vs ref +0.0238 [+0.0195, +0.0286]  <-- significativa
+mej_160k
+   brier    0.1807 [0.1781, 0.1834]   vs ref -0.0051 [-0.0064, -0.0038]  <-- significativa
+   logloss  0.5616 [0.5551, 0.5687]   vs ref -0.0076 [-0.0110, -0.0040]  <-- significativa
+   auc      0.7930 [0.7855, 0.7999]   vs ref +0.0265 [+0.0217, +0.0312]  <-- significativa
+mej_170k
+   brier    0.1801 [0.1774, 0.1829]   vs ref -0.0056 [-0.0072, -0.0042]  <-- significativa
+   logloss  0.5626 [0.5551, 0.5702]   vs ref -0.0065 [-0.0105, -0.0025]  <-- significativa
+   auc      0.7950 [0.7873, 0.8016]   vs ref +0.0284 [+0.0235, +0.0335]  <-- significativa
+mej_180k
+   brier    0.1784 [0.1756, 0.1814]   vs ref -0.0074 [-0.0090, -0.0059]  <-- significativa
+   logloss  0.5621 [0.5544, 0.5708]   vs ref -0.0070 [-0.0110, -0.0028]  <-- significativa
+   auc      0.7993 [0.7916, 0.8060]   vs ref +0.0327 [+0.0278, +0.0377]  <-- significativa
+mej_185k
+   brier    0.1784 [0.1755, 0.1814]   vs ref -0.0074 [-0.0090, -0.0059]  <-- significativa
+   logloss  0.5638 [0.5557, 0.5724]   vs ref -0.0053 [-0.0095, -0.0011]  <-- significativa
+   auc      0.7992 [0.7921, 0.8055]   vs ref +0.0327 [+0.0277, +0.0381]  <-- significativa
+mej_190k
+   brier    0.1784 [0.1753, 0.1815]   vs ref -0.0074 [-0.0091, -0.0059]  <-- significativa
+   logloss  0.5653 [0.5567, 0.5746]   vs ref -0.0038 [-0.0085, +0.0005]  (no significativa)
+   auc      0.7993 [0.7914, 0.8058]   vs ref +0.0327 [+0.0278, +0.0379]  <-- significativa
+mej_195k
+   brier    0.1781 [0.1750, 0.1812]   vs ref -0.0077 [-0.0094, -0.0062]  <-- significativa
+   logloss  0.5661 [0.5575, 0.5754]   vs ref -0.0030 [-0.0075, +0.0016]  (no significativa)
+   auc      0.8000 [0.7921, 0.8071]   vs ref +0.0335 [+0.0289, +0.0388]  <-- significativa
+
+Medicion 1: prediccion del resultado (47484 posiciones de 6000 partidas, data/lichess_db_standard_rated_2013-02.pgn.zst)
+Referencia para las diferencias: azar. IC 95 % por bootstrap de partidas.
+Brier y LogLoss: mas bajo es mejor. AUC: mas alto es mejor. Diferencia significativa si su IC no incluye el 0.
+
+material (sin red)
+   brier    0.1844 [0.1810, 0.1875]   vs ref -0.0583 [-0.0615, -0.0548]  <-- significativa
+   logloss  0.5724 [0.5629, 0.5827]   vs ref -0.1265 [-0.1358, -0.1165]  <-- significativa
+   auc      0.7749 [0.7667, 0.7832]   vs ref +0.2982 [+0.2873, +0.3095]  <-- significativa
+azar
+   brier    0.2427 [0.2413, 0.2438]   vs ref +0.0000 [+0.0000, +0.0000]
+   logloss  0.6990 [0.6983, 0.6996]   vs ref +0.0000 [+0.0000, +0.0000]
+   auc      0.4767 [0.4699, 0.4844]   vs ref +0.0000 [+0.0000, +0.0000]
+td_5k
+   brier    0.2319 [0.2304, 0.2331]   vs ref -0.0108 [-0.0114, -0.0101]  <-- significativa
+   logloss  0.6769 [0.6754, 0.6783]   vs ref -0.0221 [-0.0234, -0.0207]  <-- significativa
+   auc      0.6236 [0.6158, 0.6313]   vs ref +0.1469 [+0.1375, +0.1559]  <-- significativa
+td_10k
+   brier    0.2274 [0.2259, 0.2286]   vs ref -0.0153 [-0.0160, -0.0147]  <-- significativa
+   logloss  0.6673 [0.6658, 0.6686]   vs ref -0.0317 [-0.0331, -0.0304]  <-- significativa
+   auc      0.6623 [0.6544, 0.6697]   vs ref +0.1855 [+0.1761, +0.1945]  <-- significativa
+td_20k
+   brier    0.2166 [0.2150, 0.2178]   vs ref -0.0261 [-0.0271, -0.0252]  <-- significativa
+   logloss  0.6442 [0.6421, 0.6460]   vs ref -0.0548 [-0.0568, -0.0528]  <-- significativa
+   auc      0.7307 [0.7235, 0.7385]   vs ref +0.2540 [+0.2439, +0.2642]  <-- significativa
+treestrap_20k
+   brier    0.2398 [0.2385, 0.2409]   vs ref -0.0029 [-0.0032, -0.0026]  <-- significativa
+   logloss  0.6931 [0.6931, 0.6931]   vs ref -0.0058 [-0.0065, -0.0052]  <-- significativa
+   auc      0.5265 [0.5227, 0.5301]   vs ref +0.0498 [+0.0386, +0.0600]  <-- significativa
+
+mej_180k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de mej_180k: 0.658  IC 95 % [0.641, 0.675]  -> diferencia SIGNIFICATIVA
+  Elo de mej_180k respecto de rl_150k: +114  [+100, +127]
+  partidas: 382 victorias, 552 tablas, 66 derrotas de mej_180k
+
+mej_180k contra sf_300k: 500 pares (1000 partidas)
+  puntaje de mej_180k: 0.634  IC 95 % [0.617, 0.651]  -> diferencia SIGNIFICATIVA
+  Elo de mej_180k respecto de sf_300k: +95  [+83, +108]
+  partidas: 343 victorias, 582 tablas, 75 derrotas de mej_180k
+
+mej_195k contra mej_180k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.538  IC 95 % [0.520, 0.556]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de mej_180k: +26  [+14, +39]
+  partidas: 214 victorias, 648 tablas, 138 derrotas de mej_195k
+
+mej_195k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.681  IC 95 % [0.664, 0.698]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de rl_150k: +132  [+118, +146]
+  partidas: 412 victorias, 538 tablas, 50 derrotas de mej_195k
+
+mej_195k contra sf_300k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.664  IC 95 % [0.646, 0.682]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de sf_300k: +118  [+105, +132]
+  partidas: 392 victorias, 544 tablas, 64 derrotas de mej_195k
+
+rl_150k contra sin_rl_ck0: 500 pares (1000 partidas)
+  puntaje de rl_150k: 0.552  IC 95 % [0.537, 0.567]  -> diferencia SIGNIFICATIVA
+  Elo de rl_150k respecto de sin_rl_ck0: +36  [+26, +47]
+  partidas: 185 victorias, 734 tablas, 81 derrotas de rl_150k
+
+rl_150k contra sin_rl_regen: 500 pares (1000 partidas)
+  puntaje de rl_150k: 0.568  IC 95 % [0.552, 0.583]  -> diferencia SIGNIFICATIVA
+  Elo de rl_150k respecto de sin_rl_regen: +47  [+36, +58]
+  partidas: 215 victorias, 705 tablas, 80 derrotas de rl_150k
+
+sf_300k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de sf_300k: 0.545  IC 95 % [0.528, 0.562]  -> diferencia SIGNIFICATIVA
+  Elo de sf_300k respecto de rl_150k: +31  [+20, +43]
+  partidas: 197 victorias, 696 tablas, 107 derrotas de sf_300k
+
+== Terminado (Thu Nov 19 23:57:16 -03 2026) ==

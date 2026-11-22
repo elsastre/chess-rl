@@ -105,7 +105,10 @@ def main():
         for i, f in enumerate(puntos):
             v, lo, hi = float(f["auc_vs_ref"]), float(f["auc_vs_ref_lo"]), float(f["auc_vs_ref_hi"])
             a2.errorbar(i, v, yerr=[[v - lo], [hi - v]], fmt="o", color=color(f["modelo"]), ms=8, capsize=5, lw=1.6)
-            a2.text(i + .12, v, f"{v:+.3f}", va="center", fontsize=9)
+            if len(puntos) > 6:                    # muchas redes: el valor arriba del bigote, para que no se pisen
+                a2.text(i, hi, f"{v:+.3f}", ha="center", va="bottom", fontsize=8)
+            else:
+                a2.text(i + .12, v, f"{v:+.3f}", va="center", fontsize=9)
         a2.axhline(0, color=INK2, lw=1)
         a2.set_xticks(range(len(puntos)))
         muchas = len(puntos) > 6                   # muchas redes: etiquetas inclinadas para que no se pisen

@@ -1,0 +1,4 @@
+mej_195k contra sf_300k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.664  IC 95 % [0.646, 0.682]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de sf_300k: +118  [+105, +132]
+  partidas: 392 victorias, 544 tablas, 64 derrotas de mej_195k

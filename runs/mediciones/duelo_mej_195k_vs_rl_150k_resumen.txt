@@ -1,0 +1,4 @@
+mej_195k contra rl_150k: 500 pares (1000 partidas)
+  puntaje de mej_195k: 0.681  IC 95 % [0.664, 0.698]  -> diferencia SIGNIFICATIVA
+  Elo de mej_195k respecto de rl_150k: +132  [+118, +146]
+  partidas: 412 victorias, 538 tablas, 50 derrotas de mej_195k
