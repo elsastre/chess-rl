@@ -22,6 +22,7 @@
 \usepackage{multirow}
 \usepackage{xcolor}
 \usepackage{caption}
+\usepackage{float}          % [H]: cada figura y tabla queda donde se la menciona
 \usepackage{subcaption}
 \usepackage{enumitem}
 \usepackage[round,authoryear]{natbib}
@@ -71,7 +72,7 @@ jugadas. Para demostrar que la mejora viene del aprendizaje comparamos
 redes con todo lo demás fijo. Desde una red que solo conocía el valor de
 las piezas, el RL suma +36 puntos de Elo; al estancarse, diagnosticamos la
 causa, la corregimos y la red llegó a +148 Elo antes de volver a
-estancarse. Un análisis de explicabilidad muestra qué aprendió: por
+estancarse; contra Stockfish pasó de unos 1200 a unos 1460 puntos de Elo. Un análisis de explicabilidad muestra qué aprendió: por
 ejemplo, que un peón a un paso de coronar vale mucho más que uno en su
 casilla inicial, algo que nadie le enseñó.
 \end{minipage}
@@ -208,8 +209,11 @@ da el mismo resultado que el árbol completo evaluando unas 250 posiciones
 en vez de 1.070 (detalle en el \cref{anx:tecnico}). En las hojas también se
 detectan los mates en una jugada.
 
-\paragraph{Cómo aprende.} Cada partida arranca de una posición real de
-Lichess \citep{lichess} para tener variedad. El agente juega contra sí
+\paragraph{Cómo aprende.} Cada partida arranca de una posición real
+tomada de partidas jugadas por personas en Lichess, un sitio de ajedrez en
+línea que publica todas sus partidas en una base abierta \citep{lichess};
+para el entrenamiento usamos las de enero de 2013. Así cada partida es
+distinta. El agente juega contra sí
 mismo (60\,\%), contra versiones viejas suyas (15\,\%, para no olvidar) y
 contra Stockfish \citep{stockfish} (25\,\%), con un currículo que sube o baja
 la dificultad según cómo le va \citep{bengio2009}. De cada partida salen
@@ -227,7 +231,13 @@ cambiaron los pesos aprendiendo de partidas? Para responderla, en cada
 comparación todo lo demás queda fijo: misma búsqueda, mismas posiciones,
 mismo rival. \Cref{tab:corridas} resume las corridas.
 
-\begin{table}[h]
+\paragraph{Datos.} Los únicos datos externos son partidas de la base abierta
+de Lichess. Las de \textbf{enero de 2013} se usan solo para elegir posiciones
+de arranque durante el entrenamiento; las de \textbf{febrero de 2013}, que
+ninguna red vio, forman el \emph{conjunto de prueba} con el que medimos la
+predicción del resultado y hacemos el análisis de explicabilidad.
+
+\begin{table}[H]
 \centering\small
 \begin{tabularx}{\textwidth}{@{}l X r@{}}
 \toprule
@@ -254,10 +264,9 @@ Usamos tres instrumentos:
 \item \textbf{Enfrentamiento directo} entre dos redes con la misma búsqueda:
   500 posiciones de partida reales, cada una jugada dos veces con los colores
   cambiados (1.000 partidas). Detecta diferencias de unos 30 Elo.
-\item \textbf{Predicción del resultado} en 47.484 posiciones de partidas de
-  Lichess de febrero de 2013, que ninguna red vio (el entrenamiento usó
-  enero). Medimos el AUC con intervalos por bootstrap
-  \citep{efron1993}.
+\item \textbf{Predicción del resultado} en 47.484 posiciones de 6.000
+  partidas del conjunto de prueba (febrero de 2013): ¿la red sabe quién va
+  ganando? Medimos el AUC con intervalos por bootstrap \citep{efron1993}.
 \end{enumerate}
 
 % =========================== 5. RESULTADOS =============================
@@ -274,7 +283,7 @@ enseñó (\cref{fig:cero}). TreeStrap solo, en cambio, colapsa: termina
 diciendo 50\,\% en cualquier posición (AUC 0,53). Es el punto fijo de la
 sección 2.4 visto en la práctica, y la razón del objetivo mixto.
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{desde_cero_auc.jpeg}
 \caption{Mejora del AUC respecto de la red al azar (IC 95\,\%). En azul,
@@ -316,7 +325,26 @@ y ampliar la memoria de la red.
 
 \subsection{Las correcciones rompen la meseta}
 
-\begin{table}[h]
+Con las correcciones, 30.000 partidas valen \textbf{+114 Elo}, más que las
+150.000 de la continuación a profundidad 1 (\cref{tab:atribucion,fig:atribucion}).
+Seguimos hasta 210.000: la fuerza subió unos 25 Elo más hasta las 195.000 y
+después se estabilizó (las redes de 195k y 210k le sacan lo mismo a la de
+180k), y la predicción ya se había estabilizado en 180k. Por eso cerramos el
+entrenamiento en 210.000 partidas, que es la red que usa el robot:
+\textbf{+148 Elo} sobre la de 150k.
+
+Para tener también un número absoluto, medimos las dos redes contra
+Stockfish 1320 con el mismo protocolo del $\approx$1240 (300 partidas cada
+una, en la misma máquina y la misma sesión, porque con tiempo fijo la
+fuerza de Stockfish depende de la computadora). La de 150k dio
+1201 [1159; 1242], compatible con la medición anterior, y la de 210k sacó
+0,692 de los puntos: \textbf{unos 1460 de Elo [1418; 1503]}. La diferencia
+contra Stockfish (unos 260 puntos) es mayor que los +148 del
+enfrentamiento directo: el Elo no es exactamente transitivo entre rivales
+distintos, y varias correcciones (detectar mates, niveles intermedios de
+Stockfish) apuntan justo a jugar mejor contra ese rival.
+
+\begin{table}[H]
 \centering\small
 \begin{tabular}{@{}lcc@{}}
 \toprule
@@ -335,7 +363,7 @@ son significativas.}
 \label{tab:atribucion}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{resumen_atribucion.png}
 \caption{Izquierda: diferencia de Elo en enfrentamiento directo (IC 95\,\%).
@@ -344,14 +372,6 @@ el RL; naranja: continuación a profundidad 1; verde: corrida con las
 correcciones.}
 \label{fig:atribucion}
 \end{figure}
-
-Con las correcciones, 30.000 partidas valen \textbf{+114 Elo}, más que las
-150.000 de la continuación a profundidad 1 (\cref{tab:atribucion,fig:atribucion}).
-Seguimos hasta 210.000: la fuerza subió unos 25 Elo más hasta las 195.000 y
-después se estabilizó (las redes de 195k y 210k le sacan lo mismo a la de
-180k), y la predicción ya se había estabilizado en 180k. Por eso cerramos el
-entrenamiento en 210.000 partidas, que es la red que usa el robot:
-\textbf{+148 Elo} sobre la de 150k.
 
 Revisamos que no hubiera trampas en la medición: el color no influye,
 ninguna partida llegó al tope de jugadas y la red con las correcciones
@@ -372,10 +392,19 @@ con $u$ el valor para el dueño de la pieza $x$, expresado en peones. La
 elegimos en lugar de métodos de gradientes (como Grad-CAM) porque la entrada
 es de unos y ceros: un gradiente responde qué pasaría con ``media pieza'',
 algo que no existe, mientras que sacar la pieza es una pregunta natural.
-Promediamos sobre 3.000 posiciones tranquilas de las partidas de febrero
-(sin sacar los reyes).
+Promediamos sobre 3.000 posiciones tranquilas del conjunto de prueba
+(partidas de Lichess de febrero de 2013), sin sacar los reyes.
 
-\begin{table}[h]
+\Cref{tab:xai,fig:xai_global} muestran dos cosas. Primero, tras el RL los
+valores de las piezas se acercan a los clásicos (3, 3, 5 y 9). Una parte de
+eso es que la red se volvió más segura de sí misma en general, pero no es
+solo eso. Segundo, y más claro: \textbf{el RL aprendió que un peón avanzado
+vale mucho más}. Un peón a un paso de coronar vale 1,5 peones comunes para la
+red sin RL y 3,4 para la red con RL. La red sin RL partió del material, que
+cuenta igual a un peón en cualquier casilla: ese conocimiento solo pudo
+venir de jugar.
+
+\begin{table}[H]
 \centering\small
 \begin{tabular}{@{}lcccc@{}}
 \toprule
@@ -394,33 +423,12 @@ $\pm0,1$, salvo los del peón a un paso de coronar (por ejemplo, 0,76 a
 \label{tab:xai}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{valores_piezas.png}
 \caption{Izquierda: valor de cada pieza para tres redes y los valores
 clásicos. Derecha: valor del peón según cuánto avanzó (IC 95\,\%).}
 \label{fig:xai_global}
-\end{figure}
-
-\Cref{tab:xai,fig:xai_global} muestran dos cosas. Primero, tras el RL los
-valores de las piezas se acercan a los clásicos (3, 3, 5 y 9). Una parte de
-eso es que la red se volvió más segura de sí misma en general, pero no es
-solo eso. Segundo, y más claro: \textbf{el RL aprendió que un peón avanzado
-vale mucho más}. Un peón a un paso de coronar vale 1,5 peones comunes para la
-red sin RL y 3,4 para la red con RL. La red sin RL partió del material, que
-cuenta igual a un peón en cualquier casilla: ese conocimiento solo pudo
-venir de jugar.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{mapa_lichess_1.png}
-\caption{Oclusión en una posición de Lichess: el número sobre cada pieza es
-cuánto pierde su dueño si se la saca; a la derecha, cuánto más la valora la
-red tras el RL. Para la red de 210k, el peón negro de d3, a dos pasos de
-coronar y apoyado por la dama, vale 12 peones (0,9 para la red sin RL), y
-por eso evalúa la posición a favor de las negras. Es un caso extremo,
-elegido entre 1.000 posiciones por ser de los que más cambian.}
-\label{fig:xai_mapa}
 \end{figure}
 
 Los mapas sobre el tablero (\cref{fig:xai_mapa}) explican decisiones
@@ -430,6 +438,18 @@ pieza por separado y no sus combinaciones, y al sacar una pieza la posición
 puede quedar rara (una dama que de pronto queda atacada), así que los mapas
 de posiciones sueltas son ilustrativos y las conclusiones salen de los
 promedios.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{mapa_lichess_1.png}
+\caption{Oclusión en una posición del conjunto de prueba: el número sobre cada pieza es
+cuánto pierde su dueño si se la saca; a la derecha, cuánto más la valora la
+red tras el RL. Para la red de 210k, el peón negro de d3, a dos pasos de
+coronar y apoyado por la dama, vale 12 peones (0,9 para la red sin RL), y
+por eso evalúa la posición a favor de las negras. Es un caso extremo,
+elegido entre 1.000 posiciones por ser de los que más cambian.}
+\label{fig:xai_mapa}
+\end{figure}
 
 % =========================== 6. CASO DE APLICACIÓN =====================
 \section{Caso de aplicación: el robot}
@@ -447,7 +467,7 @@ cara que expresa su estado. Como el robot no tiene brazo, la persona mueve
 las piezas del robot siguiendo lo que indica la pantalla.
 % Si suben la foto del montaje como figuras/montaje.jpg, aparece sola:
 \IfFileExists{figuras/montaje.jpg}{%
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.6\textwidth]{montaje.jpg}
 \caption{El montaje: webcam en un trípode sobre el tablero y pantalla con
@@ -508,9 +528,9 @@ coronar.
 \item \textbf{Una sola semilla.} Por costo de cómputo cada corrida se
   entrenó una vez: los intervalos cubren el ruido de la medición, no el del
   entrenamiento.
-\item \textbf{Elo en escala Stockfish.} Los 1240 son de la red de 150k contra
-  Stockfish y no equivalen a un rating humano; el Elo absoluto de la red de
-  210k no se midió (le gana a la de 150k por +148).
+\item \textbf{Elo en escala Stockfish.} Los 1200 y 1460 están medidos contra
+  Stockfish limitado por tiempo: dependen de la máquina (por eso medimos
+  las dos redes juntas) y no equivalen a un rating humano.
 \item \textbf{Entrada incompleta.} La red no ve el enroque, la captura al
   paso ni las repeticiones.
 \item \textbf{Nueva meseta.} La corrida con correcciones se estabilizó hacia
@@ -531,13 +551,14 @@ atribuir al aprendizaje con mediciones cuidadosas. El recorrido tuvo cinco
 pasos: (1) desde cero, el RL aprende a evaluar casi como el material sin
 que nadie se lo enseñe; (2) desde el material, suma +36 Elo; (3) seguir
 igual se estanca; (4) diagnosticamos por qué, lo corregimos y la red llega
-a +148 Elo antes de estabilizarse otra vez; (5) la explicabilidad muestra
+a +148 Elo en enfrentamiento directo (de unos 1200 a unos 1460 contra
+Stockfish) antes de estabilizarse otra vez; (5) la explicabilidad muestra
 que esa mejora tiene contenido de ajedrez real, como el valor de los peones
 avanzados. La lección más general es sobre cómo medir: con 100 partidas
 contra un rival fijo no se veía nada; con enfrentamientos directos y
 predicción fuera de muestra, sí.
 
-Como trabajo futuro: medir el Elo absoluto de la mejor red, separar el
+Como trabajo futuro: separar el
 aporte de cada corrección, darle a la red la información que le falta o una
 red más grande para superar la nueva meseta, buscar conceptos más complejos
 dentro de la red (rey expuesto, estructura de peones) y sumarle un brazo al
@@ -642,7 +663,7 @@ convolutional networks. \textit{Proceedings of ECCV}, 818--833.
 \section{Hiperparámetros}
 \label{anx:hiper}
 
-\begin{table}[h]
+\begin{table}[H]
 \centering\footnotesize
 \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.3\textwidth}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
 \toprule
@@ -679,7 +700,7 @@ posiciones reales da el mismo valor de la raíz que el árbol completo
 (diferencia máxima $2\cdot10^{-7}$).
 
 \paragraph{Experiencia y objetivo mixto.} Cada partida arranca de una
-posición de Lichess de enero de 2013 más una jugada al azar. El autojuego se
+posición de las partidas de Lichess de enero de 2013 más una jugada al azar. El autojuego se
 juega en tramos de 30 jugadas; si no termina, se adjudica por material: la
 ventaja $c$ en centipeones se lleva a $z=\tanh(c\ln10/800)$. En cada jugada
 se guardan hasta 8 muestras de TreeStrap y, al terminar, una de TD-Leaf por
@@ -721,11 +742,11 @@ cambio no es solo de escala.
 \section{Calibración de las redes}
 \label{anx:calib}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.6\textwidth]{valor_calibracion.jpeg}
 \caption{Proporción real de puntos frente a la chance de ganar que da cada
-red, en las posiciones de febrero de 2013. Todas las redes están cerca de la
+red, en las posiciones del conjunto de prueba (Lichess, febrero de 2013). Todas las redes están cerca de la
 diagonal; el predictor de material puro es el más alejado en las posiciones
 desfavorables.}
 \end{figure}
@@ -754,6 +775,10 @@ python medir_valor.py --pgn data/lichess_db_standard_rated_2013-02.pgn.zst \
     --ck sin_rl=runs/final/ck_000000.pt rl=runs/final/ck_150000.pt
 python duelo.py --a runs/mejoras/ck_210000.pt --b runs/final/ck_150000.pt \
     --pares 500 --poda
+
+# Elo absoluto contra Stockfish 1320 (las dos redes en la misma sesión)
+python elo_stockfish.py --ck rl_150k=runs/final/ck_150000.pt \
+    mej_210k=runs/mejoras/ck_210000.pt --stockfish RUTA --partidas 300
 
 # Explicabilidad por oclusión
 python explicar.py --ck sin_rl=runs/final/ck_000000.pt \

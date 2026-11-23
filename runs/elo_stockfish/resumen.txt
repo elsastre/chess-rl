@@ -1,0 +1,11 @@
+Elo contra Stockfish 1320 (0,05 s por jugada), agente a profundidad 2, quiescencia 4, desde la posicion inicial
+
+rl_150k: 300 partidas contra Stockfish 1320
+  puntaje 0.335  IC 95 % (Wilson) [0.284, 0.390]
+  Elo ≈ 1201  [1159, 1242]
+  67 victorias, 67 tablas, 166 derrotas | con blancas 0.36, con negras 0.31
+
+mej_210k: 300 partidas contra Stockfish 1320
+  puntaje 0.692  IC 95 % (Wilson) [0.637, 0.741]
+  Elo ≈ 1460  [1418, 1503]
+  179 victorias, 57 tablas, 64 derrotas | con blancas 0.74, con negras 0.64

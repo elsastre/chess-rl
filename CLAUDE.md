@@ -20,7 +20,8 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 
 - **Objetivo de fuerza:** unos 1000 de Elo. Medido con `ck_150000`: ≈ 1240 (IC 95 %: 1200 a 1280, 300 partidas,
   escala Stockfish por tiempo). `runs/mejoras/ck_210000.pt` (el del robot) le gana a 150k por +148 Elo en
-  enfrentamiento directo; su Elo absoluto contra Stockfish todavía no se midió.
+  enfrentamiento directo y contra Stockfish 1320 da **≈ 1460 [1418; 1503]** (22/11, `elo_stockfish.py`, 300
+  partidas; en la misma sesión 150k dio 1201 [1159; 1242], compatible con el ≈ 1240 viejo).
 - **Entrega y presentación:** clase 31, **jueves 26/11/2026**. Informe + proyecto Python en este repo
   (**sin notebooks**). Tiene que tener marco teórico de los métodos y un caso de aplicación. Se evalúa la
   originalidad y se tiene en cuenta el tamaño del grupo. El tema (RL) se elige antes con la herramienta de la web
@@ -55,6 +56,7 @@ tablero, voz que dice la jugada y pantalla con una cara cuyas emociones salen de
 | `posiciones_lichess.py` | PGN de Lichess → archivo de FEN (`data/fens.txt`) para arrancar partidas desde posiciones reales | usado |
 | `evaluar.py` | Evalúa checkpoints contra la escalera fija → `curva*.csv`. Opciones nuevas: `--poda`, `--mates`, `--sf-nodes` | **en uso** |
 | `lanzar_final_sf.sh`, `lanzar_mejoras.sh` | Scripts de la Mac: verifican el entorno y lanzan una corrida con `caffeinate` (rutas de Homebrew) | solo Mac |
+| `elo_stockfish.py` | **Elo absoluto (22/11)**: varias redes contra Stockfish 1320 con el protocolo del ≈ 1240, en paralelo y reanudable; IC de Wilson (pendiente 3) | **en uso** |
 | `explicar.py` | **Explicabilidad (22/11)**: oclusión de piezas: valor medio de cada pieza y del peón por fila para varias redes, y mapas sobre el tablero (sección 4.6) | **en uso** |
 | `medir_valor.py` | **Medición 1 (17/11)**: qué tan bien predice cada red el resultado de partidas que no vio (Brier, LogLoss, AUC, calibración), con IC por bootstrap de partidas (sección 4.4) | **en uso** |
 | `duelo.py` | **Medición 2 (17/11)**: enfrentamiento directo entre dos redes con la misma búsqueda, aperturas pareadas (cada una con los dos colores), Elo con IC; reanudable | **en uso** |
@@ -733,7 +735,10 @@ python train_supervised.py data/lichess_2013_01.npz --out checkpoints/supervisad
 2. **Usar el mejor checkpoint medido en el robot**, `interfaz.py` y ChessCam, con `--depth 2` (es la búsqueda con
    la que entrenó). **Es `runs/mejoras/ck_210000.pt`** (22/11), el mismo que ya tiene electrónica para la
    pantalla. Probado con cámara, pantalla y reloj reales (22/11): funciona.
-3. **Elo absoluto del mejor checkpoint** (opcional, para la presentación): `evaluar.py` con `--depth 2 --q 4
+3. ~~**Elo absoluto del mejor checkpoint**~~ **Hecho el 22/11** con `elo_stockfish.py` (mismo protocolo que el
+   ≈ 1240: Stockfish 1320, 0,05 s, desde la posición inicial, 300 partidas por red, las dos en la misma sesión
+   porque con tiempo fijo depende de la máquina): 150k ≈ 1201 [1159; 1242], **210k ≈ 1460 [1418; 1503]**.
+   Resultados en `runs/elo_stockfish/`. Plan original: (opcional, para la presentación): `evaluar.py` con `--depth 2 --q 4
    --poda --stockfish ... --sf-nodes 20000` y 100 a 200 partidas sobre `ck_210000` y `ck_150000` en una carpeta
    aparte. El ≈ 1240 actual es de 150k con Stockfish por tiempo.
 4. Control de la búsqueda (opcional): `ck_180000` con y sin `--mates` en `duelo.py` contra el mismo rival, para
