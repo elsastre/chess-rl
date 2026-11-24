@@ -1264,6 +1264,8 @@ def main():
                          "jugada; si no, sigue corriendo el suyo")
     ap.add_argument("--filtro-negras", action="store_true",
                     help="activa el filtro para piezas negras (gamma en las sombras y textura local)")
+    ap.add_argument("--pantalla", default=None, metavar="PUERTO",
+                    help="puerto serie del display LED de los ojos (por ejemplo COM5); ver pantalla_led/")
     args = ap.parse_args()
     vision_kwargs = dict(VISION_ORIGINAL) if args.vision_original else {}
     if args.vision_original:
@@ -1300,8 +1302,14 @@ def main():
     if args.ck:
         print(f"[bot] cargando {args.ck} (profundidad {args.depth})...", flush=True)
         bot = Bot(args.ck, args.depth)
+    pantalla = None
+    if args.pantalla:
+        from pantalla_led.pantalla_led import PantallaLED
+        print(f"[pantalla] abriendo el display LED en {args.pantalla}...", flush=True)
+        pantalla = PantallaLED(args.pantalla)
+        pantalla.pensando(borrar_jugada=True)
     partida = Partida(bot, chess.WHITE if args.bot == "blancas" else chess.BLACK, con_camara=cap is not None,
-                      reloj=reloj)
+                      reloj=reloj, pantalla=pantalla)
 
     root = tk.Tk()
     app = App(root, cap, args.board, partida=partida, vision_kwargs=vision_kwargs,
