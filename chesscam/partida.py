@@ -175,8 +175,9 @@ class Bot:
 
 
 class Partida:
-    def __init__(self, bot=None, color_bot=chess.BLACK, con_camara=True, reloj=None):
+    def __init__(self, bot=None, color_bot=chess.BLACK, con_camara=True, reloj=None, pantalla=None):
         self.board = chess.Board()
+        self.pantalla = pantalla     # display LED de los ojos (pantalla_led.PantallaLED) o None
         self.reloj = reloj           # Reloj o None (sin reloj)
         self.tiempo_agotado = None   # bando que perdio por tiempo (o empato: ver resultado())
         self.bot, self.color_bot, self.con_camara = bot, color_bot, con_camara
@@ -212,6 +213,8 @@ class Partida:
         if self.bot is None or self.pensando or self.terminada():
             return False
         self.pensando = True
+        if self.pantalla is not None and not pista:
+            self.pantalla.pensando()
         b, v = self.board.copy(), self._version
 
         def trabajo():
@@ -242,6 +245,8 @@ class Partida:
         self.valor = valor
         self.flecha_bot = mv
         self.texto_bot = describir(self.board, mv)
+        if self.pantalla is not None:                    # con el tablero de ANTES de la jugada
+            self.pantalla.mostrar(emocion(self.valor, self.sorpresa), self.board, mv)
         if self.con_camara:
             self.pendiente = mv                          # la hace la persona en el tablero real: el reloj del
         else:                                            # bot sigue corriendo hasta que la camara la confirma
@@ -276,6 +281,8 @@ class Partida:
         self._reloj_jugo(not self.board.turn)
         self.flecha_bot, self.pista = None, None
         self._version += 1
+        if self.pantalla is not None and self.bot is not None and self.board.is_checkmate():
+            self.pantalla.poner_emocion("perdiendo")     # le dieron mate al bot: no llega a pensar
         return True, san
 
     def jugada_pendiente_hecha(self):
@@ -299,6 +306,8 @@ class Partida:
         self.valor = self.sorpresa = None
         self.texto_bot = ""
         self.tiempo_agotado = None                       # se puede deshacer una derrota por tiempo
+        if self.pantalla is not None:
+            self.pantalla.pensando(borrar_jugada=True)
         if self.reloj is not None and self.reloj.iniciado:
             self.reloj.pasar_a(self.board.turn)          # los tiempos quedan como estaban
 
@@ -310,8 +319,10 @@ class Partida:
         self.valor = self.sorpresa = None
         self.texto_bot = ""
         self.tiempo_agotado = None
+        if self.pantalla is not None:
+            self.pantalla.pensando(borrar_jugada=True)
         if self.reloj is not None:
-            self.reloj.reiniciar()                       # arranca cuando la interfaz diga que esta lista
+            self.reloj.reiniciar()                      # arranca cuando la interfaz diga que esta lista
 
     # ---------------------------------------------------------------- para mostrar
     def resultado(self):
